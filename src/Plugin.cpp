@@ -17,7 +17,8 @@ std::vector<Stolen> stolen;std::atomic_bool active=false,queued=false;std::atomi
 double playSeconds=0;Clock::time_point lastTick=Clock::now();std::jthread worker;
 const StandingPickpocketAPI::V1* standing=nullptr;int ownerToken;
 RE::TESFaction* follower=nullptr;std::vector<RE::TESFaction*> guilds,outlaws;
-std::set<RE::FormID> animated;std::atomic_bool hookReady=false;std::atomic<float> cachedCap=-1;std::atomic_bool distanceOwned=false;
+std::set<RE::FormID> animated;std::map<RE::FormID,BumpObservation> bumpObservations;
+RE::NiPoint3 previousPlayerPosition{};bool havePlayerPosition=false;double nextFullTick=0;std::atomic_bool hookReady=false;std::atomic<float> cachedCap=-1;std::atomic_bool distanceOwned=false;
 constexpr auto configPath=L"Data/SKSE/Plugins/PickpocketOverhaul.ini";
 using ChanceFn=std::int32_t(*)(float,float,std::uint32_t,float,RE::Actor*,RE::Actor*,bool,RE::TESForm*);
 ChanceFn original=nullptr;
@@ -45,14 +46,39 @@ bool member(RE::Actor* a,const std::vector<RE::TESFaction*>& groups) {return std
 bool friends(RE::Actor* a,RE::Actor* b) {auto* rel=RE::BGSRelationship::GetRelationship(a->GetActorBase(),b->GetActorBase());return rel&&unsigned(*rel->level)<=unsigned(RE::BGSRelationship::RELATIONSHIP_LEVEL::kFriend);}
 bool shared(RE::Actor* a,RE::Actor* b) {return std::any_of(outlaws.begin(),outlaws.end(),[&](auto* f){return a->IsInFaction(f)&&b->IsInFaction(f);});}
 bool sees(RE::Actor* a,RE::Actor* b) {return a->GetDistance(b)<900&&a->RequestLOS(b)>0&&a->RequestDetectionLevel(b)>0;}
+bool nativeCondition(RE::Actor* actor,RE::FUNCTION_DATA::FunctionID function) {
+    RE::TESConditionItem condition;condition.data.functionData.function=function;condition.data.comparisonValue.f=1.f;
+    RE::ConditionCheckParams params(actor,RE::PlayerCharacter::GetSingleton());return condition.IsTrue(params);
+}
+void observeBumps(const std::vector<RE::ActorHandle>& actors,RE::PlayerCharacter* player) {
+    const auto position=player->GetPosition();
+    const bool moving=havePlayerPosition&&position.GetDistance(previousPlayerPosition)>1.f;
+    previousPlayerPosition=position;havePlayerPosition=true;
+    std::set<RE::FormID> nearby;
+    for(auto& handle:actors)if(auto actor=handle.get();actor&&actor->GetParentCell()==player->GetParentCell()&&actor->GetDistance(player)<180){
+        auto* process=actor->GetActorRuntimeData().currentProcess;auto* high=process?process->high:nullptr;if(!high)continue;
+        const auto id=actor->GetFormID();nearby.insert(id);
+        const auto distance=actor->GetDistance(player);bool contact=moving&&distance<90&&!actor->IsInCombat()&&actor->GetSitSleepState()!=RE::SIT_SLEEP_STATE::kIsSleeping;
+        // The engine exposes bump state, but not its instigator here. Reject an
+        // ambiguous crowd contact when another actor is closer to this NPC.
+        if(contact)for(auto& otherHandle:actors)if(auto other=otherHandle.get();other&&other.get()!=actor.get()&&other->GetParentCell()==actor->GetParentCell()&&other->GetDistance(actor.get())<distance){contact=false;break;}
+        if(nativeBump(bumpObservations[id],high->bumpTimer.timeStamp,static_cast<int>(high->bumpedState),contact,playSeconds)&&nativeCondition(actor.get(),RE::FUNCTION_DATA::FunctionID::kIsSmallBump)){
+            auto& state=states[id];const auto oldCount=state.bumps;bump(state,playSeconds);
+            if(state.bumps!=oldCount)SKSE::log::info("Native small bump {:08X}: count {}, distraction until {:.2f}, suspicion {:.1f}",id,state.bumps,state.bumpUntil,state.suspicion);
+        }
+    }
+    std::erase_if(bumpObservations,[&](const auto& entry){return !nearby.contains(entry.first);});
+}
 Situation situation(RE::Actor* victim,bool detected,const std::vector<RE::ActorHandle>& actors) {
     auto* player=RE::PlayerCharacter::GetSingleton();auto& s=states[victim->GetFormID()];Situation f;
     f.attention=25+s.suspicion+(s.failedUntil>playSeconds?25:0)+(s.observedUntil>playSeconds?12:0)+(s.interactionUntil>playSeconds?8:0);
     f.facing=std::abs(victim->GetHeadingAngle(player->GetPosition(),false))<70;
     f.close=victim->GetDistance(player)<65;f.detected=detected;
     f.sleeping=victim->GetSitSleepState()==RE::SIT_SLEEP_STATE::kIsSleeping;f.sitting=victim->IsSitting();f.talking=victim->GetCurrentScene()!=nullptr;
+    auto* ui=RE::UI::GetSingleton();
+    f.speakingToPlayer=ui&&!ui->IsMenuOpen(RE::DialogueMenu::MENU_NAME)&&nativeCondition(victim,RE::FUNCTION_DATA::FunctionID::kIsTalking)&&nativeCondition(victim,RE::FUNCTION_DATA::FunctionID::kIsGreetingPlayer);
     if(auto* proc=victim->GetActorRuntimeData().currentProcess) {auto focus=proc->GetHeadtrackTarget().get();f.focusedElsewhere=focus&&focus.get()!=player;}
-    f.misdirection=(s.bumpUntil>playSeconds?12.f:0.f)+(s.commotionUntil>playSeconds?10.f:0.f);
+    f.misdirection=(s.bumpUntil>playSeconds?24.f:0.f)+(s.commotionUntil>playSeconds?10.f:0.f);
     unsigned count=0;
     for(auto& handle:actors) if(auto other=handle.get();other&&other.get()!=victim&&other->GetParentCell()==victim->GetParentCell()&&other->GetDistance(victim)<700) {
         if(following(other.get()))continue;
@@ -160,13 +186,14 @@ struct Events final:RE::BSTEventSink<RE::TESContainerChangedEvent>,RE::BSTEventS
         if(e&&e->menuName==RE::ContainerMenu::MENU_NAME){auto open=e->opening;queue([this,open]{if(open&&RE::ContainerMenu::GetContainerMode()==RE::ContainerMenu::ContainerMode::kPickpocket){auto ref=RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());auto* a=ref?ref->As<RE::Actor>():nullptr;menuVictim=a?a->GetFormID():0;transferred=false;if(menuVictim){auto& s=states[menuVictim];if(s.interactionUntil>playSeconds)s.suspicion=std::min(60.f,s.suspicion+5);s.interactionUntil=playSeconds+15;}}else if(!open){if(menuVictim&&!transferred)if(auto* a=RE::TESForm::LookupByID<RE::Actor>(menuVictim);a&&(a->IsAlarmed()||a->IsInCombat())){states[menuVictim].failedUntil=playSeconds+60;}menuVictim=0;}});}return RE::BSEventNotifyControl::kContinue;
     }
     RE::BSEventNotifyControl ProcessEvent(const RE::BSAnimationGraphEvent* e,RE::BSTEventSource<RE::BSAnimationGraphEvent>*)override {
-        if(e&&e->holder){const auto id=e->holder->GetFormID();const std::string tag=e->tag.c_str();queue([id,tag]{auto* a=RE::TESForm::LookupByID<RE::Actor>(id);auto* p=RE::PlayerCharacter::GetSingleton();if(!valid(a)||!p)return;if((tag=="bump"||tag=="Bump"||tag=="bumped")&&a->GetDistance(p)<90)bump(states[id],playSeconds);if(tag=="SoundPlay.NPCHumanEat"||tag=="SoundPlay.NPCHumanDrink")states[id].commotionUntil=playSeconds+5;});}return RE::BSEventNotifyControl::kContinue;
+        if(e&&e->holder){const auto id=e->holder->GetFormID();const std::string tag=e->tag.c_str();queue([id,tag]{auto* a=RE::TESForm::LookupByID<RE::Actor>(id);auto* p=RE::PlayerCharacter::GetSingleton();if(!valid(a)||!p)return;if(tag=="SoundPlay.NPCHumanEat"||tag=="SoundPlay.NPCHumanDrink")states[id].commotionUntil=playSeconds+5;});}return RE::BSEventNotifyControl::kContinue;
     }
 };
 void tick() {
     auto now=Clock::now();float delta=std::chrono::duration<float>(now-lastTick).count();lastTick=now;
     auto* ui=RE::UI::GetSingleton();if(!active||!ui||ui->GameIsPaused())return;
     std::scoped_lock lock(mutex);playSeconds+=std::clamp(delta,0.f,2.f);auto actors=loaded();auto* p=RE::PlayerCharacter::GetSingleton();if(!p)return;
+    observeBumps(actors,p);if(playSeconds<nextFullTick)return;nextFullTick=playSeconds+.5;
     for(auto& h:actors)if(auto a=h.get();a&&a->GetDistance(p)<1200){auto& s=states[a->GetFormID()];decay(s,playSeconds);if(a->IsInCombat())s.commotionUntil=playSeconds+4;if(p->IsSneaking()&&sees(a.get(),p))s.observedUntil=playSeconds+30;if(animated.insert(a->GetFormID()).second&&!a->AddAnimationGraphEventSink(&Events::get()))animated.erase(a->GetFormID());}
     double today=days();std::set<std::pair<std::uint32_t,std::uint16_t>> completed;
     for(auto& s:stolen){auto* container=RE::TESForm::LookupByID<RE::TESObjectREFR>(s.container);if(!container)continue;auto* x=instance(container,s);if(!x)continue;
@@ -182,12 +209,12 @@ void tick() {
 }
 constexpr std::uint32_t record=0x504F5331;
 void save(SKSE::SerializationInterface* api){std::scoped_lock lock(mutex);if(!api->OpenRecord(record,1))return;api->WriteRecordData(&playSeconds,sizeof(playSeconds));auto count=std::uint32_t(states.size());api->WriteRecordData(&count,4);for(auto& [id,s]:states){api->WriteRecordData(&id,4);api->WriteRecordData(&s,sizeof(s));}count=std::uint32_t(stolen.size());api->WriteRecordData(&count,4);for(auto& s:stolen)api->WriteRecordData(&s,sizeof(s));}
-void clear(SKSE::SerializationInterface*){active=false;++session;std::scoped_lock lock(mutex);states.clear();stolen.clear();animated.clear();playSeconds=0;cachedCap=-1;Events::get().menuVictim=0;}
+void clear(SKSE::SerializationInterface*){active=false;++session;std::scoped_lock lock(mutex);states.clear();stolen.clear();animated.clear();bumpObservations.clear();havePlayerPosition=false;nextFullTick=0;playSeconds=0;cachedCap=-1;Events::get().menuVictim=0;}
 void load(SKSE::SerializationInterface* api){clear(api);std::uint32_t type,version,length;while(api->GetNextRecordInfo(type,version,length)){if(type!=record||version!=1)continue;std::uint32_t count;if(api->ReadRecordData(&playSeconds,sizeof(playSeconds))!=sizeof(playSeconds)||!std::isfinite(playSeconds)||api->ReadRecordData(&count,4)!=4||count>100000)return;for(unsigned i=0;i<count;++i){std::uint32_t id,newID;AttentionState s;if(api->ReadRecordData(&id,4)!=4||api->ReadRecordData(&s,sizeof(s))!=sizeof(s))return;if(api->ResolveFormID(id,newID)&&std::isfinite(s.suspicion))states.emplace(newID,s);}if(api->ReadRecordData(&count,4)!=4||count>100000)return;for(unsigned i=0;i<count;++i){Stolen s;if(api->ReadRecordData(&s,sizeof(s))!=sizeof(s))return;bool validIDs=true;for(auto* id:{&s.victim,&s.form,&s.owner,&s.container,&s.uidBase}){std::uint32_t next=0;if(*id&&!api->ResolveFormID(*id,next)){validIDs=false;break;}if(*id)*id=next;}if(validIDs&&std::isfinite(s.expires)&&std::isfinite(s.recognizesUntil))stolen.push_back(s);}}}
 void message(SKSE::MessagingInterface::Message* e){switch(e->type){case SKSE::MessagingInterface::kPostLoad:{auto h=GetModuleHandleW(L"StandingPickpocket.dll");if(h){auto request=reinterpret_cast<StandingPickpocketAPI::Request>(GetProcAddress(h,"StandingPickpocket_RequestAPI"));if(request)standing=request(1);}distanceOverride();break;}
-case SKSE::MessagingInterface::kDataLoaded:{auto* data=RE::TESDataHandler::GetSingleton();auto faction=[data](unsigned id){return data->LookupForm<RE::TESFaction>(id,"Skyrim.esm");};follower=faction(0x5C84E);for(unsigned id:{0x29DA9u,0x1F259u,0x48362u,0x1BDB3u})if(auto* f=faction(id))guilds.push_back(f);for(unsigned id:{0x1BCC0u,0x60028u,0x29DA9u})if(auto* f=faction(id))outlaws.push_back(f);auto* source=RE::ScriptEventSourceHolder::GetSingleton();auto& events=Events::get();source->AddEventSink<RE::TESContainerChangedEvent>(&events);source->AddEventSink<RE::TESUniqueIDChangeEvent>(&events);source->AddEventSink<RE::TESHitEvent>(&events);RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(&events);hookReady=installChance();worker=std::jthread([](std::stop_token stop){while(!stop.stop_requested()){std::this_thread::sleep_for(std::chrono::milliseconds(500));if(active&&!queued.exchange(true)){auto generation=session.load();SKSE::GetTaskInterface()->AddTask([generation]{queued=false;if(active&&session==generation)tick();});}}});break;}
+case SKSE::MessagingInterface::kDataLoaded:{auto* data=RE::TESDataHandler::GetSingleton();auto faction=[data](unsigned id){return data->LookupForm<RE::TESFaction>(id,"Skyrim.esm");};follower=faction(0x5C84E);for(unsigned id:{0x29DA9u,0x1F259u,0x48362u,0x1BDB3u})if(auto* f=faction(id))guilds.push_back(f);for(unsigned id:{0x1BCC0u,0x60028u,0x29DA9u})if(auto* f=faction(id))outlaws.push_back(f);auto* source=RE::ScriptEventSourceHolder::GetSingleton();auto& events=Events::get();source->AddEventSink<RE::TESContainerChangedEvent>(&events);source->AddEventSink<RE::TESUniqueIDChangeEvent>(&events);source->AddEventSink<RE::TESHitEvent>(&events);RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(&events);hookReady=installChance();SKSE::log::info("Native small-bump monitor enabled at 100ms; greetings and sleeping handling enabled");worker=std::jthread([](std::stop_token stop){while(!stop.stop_requested()){std::this_thread::sleep_for(std::chrono::milliseconds(100));if(active&&!queued.exchange(true)){auto generation=session.load();SKSE::GetTaskInterface()->AddTask([generation]{queued=false;if(active&&session==generation)tick();});}}});break;}
 case SKSE::MessagingInterface::kPreLoadGame:active=false;++session;break;
 case SKSE::MessagingInterface::kNewGame:clear(nullptr);[[fallthrough]];
 case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterface::kPostLoadGame&&!e->data)break;lastTick=Clock::now();active=hookReady.load();distanceOverride();break;default:break;}}
 }
-SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.2 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
+SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.3 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}

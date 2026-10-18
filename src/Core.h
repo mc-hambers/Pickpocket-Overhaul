@@ -24,14 +24,14 @@ inline void normalize(Config& c) {
 struct Situation {
     float attention=25,misdirection=0,witnessPenalty=0,weight=0,profileRisk=0,detection=0;
     unsigned value=0;
-    bool facing=false,close=false,detected=false,sleeping=false,sitting=false,talking=false,focusedElsewhere=false;
+    bool facing=false,close=false,detected=false,sleeping=false,sitting=false,talking=false,speakingToPlayer=false,focusedElsewhere=false;
     unsigned crowd=0,alerted=0;
 };
 inline float attention(const Situation& f) {
     if(f.sleeping)return 0;
     return std::clamp(finite(f.attention)+(f.facing?22:0)+(f.close?10:0)+
         std::max(f.detected?18.f:0.f,std::clamp(finite(f.detection),0.f,1.f)*25)+std::min(f.alerted,3u)*6-
-        (f.sitting?8:0)-(f.talking&&!f.facing?14:0)-(f.focusedElsewhere?12:0),0.f,100.f);
+        (f.sitting?8:0)-(f.speakingToPlayer?8:0)-(f.talking&&!f.facing?14:0)-(f.focusedElsewhere?12:0),0.f,100.f);
 }
 inline float distraction(const Situation& f) {
     return std::clamp((finite(f.misdirection)+std::min(f.crowd,6u)*1.5f)/30.f,0.f,1.f);
@@ -43,7 +43,7 @@ inline float cap(const Situation& f,const Config& c) {
     // A skill/perk bonus cannot rescue an actively watched, undistracted theft.
     if(f.facing&&f.detected&&!f.sleeping&&!f.focusedElsewhere&&d<.7f)return 0;
     const float eyes=std::clamp((attention(f)+std::max(0.f,finite(f.witnessPenalty))*c.witness)/100.f,0.f,1.f);
-    return std::clamp(c.maximum-c.awareness*eyes+c.distraction*d-c.weight*weightBurden(f.weight)-
+    return std::clamp(c.maximum-c.awareness*eyes+c.distraction*d-c.weight*(f.sleeping?2.f:1.f)*weightBurden(f.weight)-
         c.value*valueBurden(f.value)-c.profile*std::clamp(finite(f.profileRisk),-1.f,1.f),0.f,c.maximum);
 }
 inline float handChance(float weight,unsigned value,const Config&,float skill) {
@@ -54,7 +54,9 @@ inline float handChance(float weight,unsigned value,const Config&,float skill) {
 }
 inline int finalChance(float hand,float skill,const Situation& f,const Config& c) {
     const float trained=std::clamp(finite(skill),0.f,100.f)/100;
-    const float raw=finite(hand)+c.distraction*distraction(f)*(.5f+trained);
+    const float burden=weightBurden(f.weight);
+    const float sleepHelp=f.sleeping?70.f*(1.f-burden)-c.weight*burden:0.f;
+    const float raw=finite(hand)+sleepHelp+c.distraction*distraction(f)*(.5f+trained);
     return int(std::floor(std::clamp(finite(raw),0.f,cap(f,c))));
 }
 struct AttentionState {
@@ -72,6 +74,19 @@ inline void bump(AttentionState& s,double now) {
     s.lastBump=now;
     if (++s.bumps<=2) s.bumpUntil=now+4;
     else {s.bumpUntil=0;s.suspicion=std::min(60.f,s.suspicion+15);}
+}
+// Transient observations are deliberately not saved: loading/re-entering range
+// establishes a baseline rather than replaying an old engine bump.
+struct BumpObservation {
+    float stamp=0;int type=-1;bool initialized=false;double contactUntil=-1;
+};
+inline bool nativeBump(BumpObservation& observation,float stamp,int type,bool playerContact,double now) {
+    if(!std::isfinite(stamp)||!std::isfinite(now)){observation={};return false;}
+    if(playerContact)observation.contactUntil=now+.6;
+    const bool changed=observation.initialized&&(stamp!=observation.stamp||type!=observation.type);
+    observation.stamp=stamp;observation.type=type;
+    if(!observation.initialized){observation.initialized=true;return false;}
+    return changed&&type==0&&now<=observation.contactUntil;
 }
 inline bool witnessCounts(bool follower,bool guild,bool outlaw,bool friendOfVictim,bool sameFaction) {
     if(follower) return false;
