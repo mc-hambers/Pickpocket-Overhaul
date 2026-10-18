@@ -24,3 +24,7 @@ Inspect a sleeping NPC and compare weightless gold, 1-weight items, and heavier 
 ## 0.1.5 runtime state access
 
 On 1.6.629+ including installed 1.7.104, inspect a sleeping NPC: diagnostic actor-state-offset must be C0, sleep-state 7, sleeping true. Awake targets must show sleeping false and seated targets must get only sitting treatment. SE 1.5.97 uses B8 and needs a separate live check. Chance and bump sleep exclusion use the same runtime-aware accessor. Existing math balance and saved state are unchanged.
+
+## 0.1.7 supersedes earlier sleeping-balance checks
+
+No 80% baseline, extra sleep handling, doubled sleeping weight penalty or quarter value/occupation penalty remains. Verify sleeping personal attention is zero, witness attention persists, and the same item/skill rules apply to an awake target with zero awareness. Confirm waking restores facing/detection penalties. Runtime-aware state access and diagnostics remain.

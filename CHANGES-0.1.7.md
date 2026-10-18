@@ -1,0 +1,6 @@
+# 0.1.7 sleeping affects attention only
+Per user direction, remove all direct sleep chance changes: no handling assistance, no extra handling weight loss, no doubled cap weight penalty, and no quarter value/occupation cap penalties. All use normal awake item/skill rules.
+
+Keep the runtime-aware sleep detection fix. A sleeping victim has zero personal attention and cannot trigger the direct-facing/detected observation block. This suppresses their facing, proximity, detection, suspicion, observed sneaking, repeated-interaction and nearby-alert contributions. Sleeping bystanders are excluded from witnesses/crowd/nearby-alert counts; the shared visibility helper also prevents sleeping actors observing sneaking or recognizing worn stolen possessions. Other actors remain independent awake witnesses. Normal skill, perks, item weight/value, profiles, distractions and configured maximum continue to apply.
+
+Regression coverage compares sleeping targets against equally unaware awake targets across skill/weight/value combinations, checks witnesses still reduce cap and saturated chance, and verifies waking restores direct observation. There is no longer an 80 percent sleep baseline: default skill15/value20/weight0 without bonuses computes15 percent. This is intentional after removing direct assistance; gameplay confirmation is pending.

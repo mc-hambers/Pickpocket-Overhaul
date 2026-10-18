@@ -1,13 +1,13 @@
 {
-  "version": "0.1.6-dev",
+  "version": "0.1.7-dev",
   "x64_loader": "passed",
   "exports": "passed",
   "plugin_name": "Pickpocket Overhaul",
-  "core_checks": 21192,
+  "core_checks": 21379,
   "papyrus_compiled": true,
   "esp_esl_flag": true,
   "gameplay_tested": false,
-  "source_tag": "source-0.1.6-dev",
+  "source_tag": "source-0.1.7-dev",
   "ui_and_roll_live_tested": false,
   "reference_mod_redistributed": false
 }
