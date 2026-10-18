@@ -55,7 +55,7 @@ inline float handChance(float weight,unsigned value,const Config&,float skill) {
 inline int finalChance(float hand,float skill,const Situation& f,const Config& c) {
     const float trained=std::clamp(finite(skill),0.f,100.f)/100;
     const float burden=weightBurden(f.weight);
-    const float sleepHelp=f.sleeping?95.f*(1.f-burden*burden)-c.weight*burden:0.f;
+    const float sleepHelp=f.sleeping?65.f*(1.f-burden*burden)-c.weight*burden:0.f;
     const float raw=finite(hand)+sleepHelp+c.distraction*distraction(f)*(.5f+trained);
     return int(std::floor(std::clamp(finite(raw),0.f,cap(f,c))));
 }
