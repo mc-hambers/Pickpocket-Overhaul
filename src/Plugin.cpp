@@ -134,7 +134,7 @@ void tick() {
         if(s.reported||today<s.noticed||today>=s.recognizesUntil||s.container!=0x14||!(x->HasType<RE::ExtraWorn>()||x->HasType<RE::ExtraWornLeft>()))continue;
         auto* victim=RE::TESForm::LookupByID<RE::Actor>(s.victim);if(!valid(victim)||following(victim)||!sees(victim,p))continue;
         auto* object=RE::TESForm::LookupByID<RE::TESBoundObject>(s.form);auto* owner=RE::TESForm::LookupByID(s.owner);if(!object||!owner)continue;
-        s.reported=true;states[s.victim].suspicion=60;victim->StealAlarm(p,object,1,int(std::min(s.value,100000u)),owner,false);SKSE::log::info("Victim {:08X} recognized stolen item {:08X}",s.victim,s.form);
+        s.reported=true;states[s.victim].suspicion=60;p->StealAlarm(victim,object,1,int(std::min(s.value,100000u)),owner,false);SKSE::log::info("Victim {:08X} recognized stolen item {:08X}",s.victim,s.form);
     }
     std::erase_if(stolen,[&](const auto& s){return completed.contains({s.uidBase,s.uid});});
 }
