@@ -1,8 +1,8 @@
 # Pickpocket Overhaul
 
-SKSE awareness-based pickpocketing for Skyrim SE/AE. **0.1.2 development preview**, not the finished 1.0 release. Gameplay validation is pending.
+SKSE awareness-based pickpocketing for Skyrim SE/AE. **0.1.3 development preview**, not the finished 1.0 release. Gameplay validation is pending.
 
-## Chance and situational ceiling (0.1.2)
+## Chance and situational ceiling (0.1.3)
 
 The old skill-scaled minimum/maximum cap is removed. Skill no longer sets the ceiling. Starting balance strengths in points:
 
@@ -20,7 +20,7 @@ Actual chance comes from skill, reduced handling/security losses as skill improv
 
 The author reported a crash opening the MCM. The full crash log is unavailable, so its cause is unconfirmed. The page no longer queries the player actor value from the Papyrus VM: it reads a cached last-inspected-item ceiling. Setting changes queue Standing Pickpocket distance operations onto the game task queue. Readiness/ownership flags are atomic, option-array access is guarded, and changing settings invalidates the cached readout.
 
-The installed log showed a redirected menu chance CALL, which the live-only scan failed to discover; it disabled both hooks and left vanilla's 90% display. Version 0.1.2 discovers the original callers from the running executable on disk and verifies both live instruction contexts before installing. An executable redirected CALL is supported; changed surrounding instructions or a different caller count are rejected. In-game confirmation is still pending.
+The installed log showed a redirected menu chance CALL, which the live-only scan failed to discover; it disabled both hooks and left vanilla's 90% display. Version 0.1.3 discovers the original callers from the running executable on disk and verifies both live instruction contexts before installing. An executable redirected CALL is supported; changed surrounding instructions or a different caller count are rejected. In-game confirmation is still pending.
 
 For eligible player theft, Pickpocket Overhaul owns both chance calculations, superseding other formulas attached to these two CALLs. Inactive and non-player calls retain their previous per-site delegates. Other mods replacing the chance formula require compatibility testing; no companion files are changed.
 
@@ -30,7 +30,9 @@ For eligible player theft, Pickpocket Overhaul owns both chance calculations, su
 - SkyUI MCM: situational factor strengths, absolute maximum, reach multiplier, weight/value penalties, attention/witness strength, stolen-tag and recognition timer scales. Settings persist to the INI.
 - Optional Standing Pickpocket API v1 integration owns its distance override and lets that mod disable its distance slider. Older versions without the API cannot have their slider disabled. No companion files are modified.
 - Attention uses facing, close proximity, detection, observed sneaking, repeat menu interactions, alarm/combat after a closed unsuccessful interaction, nearby guards/alerts, sleeping, sitting, scenes and headtracking another actor.
-- Crowds and recent combat/hit commotion help misdirection. Animation-event adapters handle recognized bump/eat/drink events; repeated bumps increase suspicion.
+- Crowds and recent combat/hit commotion help misdirection. Native IsSmallBump condition plus high-process bump state/timestamp changes detect light engine reactions; recent nearby player movement supplies conservative attribution. First two bumps grant four seconds of distraction (24 raw misdirection, 80% of the default distraction allowance); further bumps within 60 seconds cancel the window and add suspicion. Duplicate events within one second are ignored. No artificial bump dialogue is played. Eating/drinking still uses animation-event adapters.
+- NPC greetings to the player outside the Dialogue Menu reduce attention by 8 points while native IsTalking and IsGreetingPlayer are true. Facing/detected observation can still block theft.
+- Sleeping zeros target attention and gives up to 70 handling points for light items, decreasing with weight. Sleeping doubles the weight penalty on the cap and adds a weight handling loss; witnesses, value, profile and the absolute maximum still apply.
 - Followers do not witness; guild actors require a friendly victim relationship; mapped bandits, beggars and thieves require a shared mapped faction. Other witnesses require visibility to player and victim.
 - Successful menu transfers can record uniquely identifiable stolen item instances. Saved victim, ownership, instance ID and deadlines follow unique-ID changes and identified container transfers. Recognition and stolen status age separately with item value.
 - A victim noticing a loss becomes more suspicious. A living visible victim can report a recognized tracked item equipped by the player once. Giving it to a follower or storing it avoids that equipped-item check. No forced player search or inventory confiscation.
@@ -39,7 +41,7 @@ For eligible player theft, Pickpocket Overhaul owns both chance calculations, su
 ## Limitations before 1.0
 
 - No in-game validation yet. Native perk argument order and two chance call sites were inspected in installed 1.7.104; 1.5.97/1.6.x still need equivalent live checks.
-- Native animation tags vary by behavior pack; physical bump attribution and eating/drinking coverage require validation. The adapters do not claim a general physics collision sensor.
+- Native bumps are sampled every 100 ms on the game task queue. The state does not expose an instigator, so contact attribution uses nearby player movement and rejects a closer competing actor. This can miss ambiguous crowded bumps; it is not a Havok contact listener. Eating/drinking animation tags still require validation.
 - Arguments, explosions without hit events, and fleeing-specific signals are not yet separately recognized; scenes, combat and hits currently supply the available commotion signals.
 - A transfer that cannot identify exactly one NPC-owned inventory instance is left unchanged. Merged stacks and ownership by factions instead of the victim need broader tracking before complete dynamic stolen-tag coverage can be claimed.
 - Theft recognition currently covers tracked equipped possessions, not magical inspection of every hidden item. NPC pursuit/dialogue or a custom searching AI package is not included.
