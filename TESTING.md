@@ -20,3 +20,7 @@ Automated math and file checks are not proof that these engine integrations work
 ## 0.1.4 sleep diagnostics
 
 Inspect a sleeping NPC and compare weightless gold, 1-weight items, and heavier items at skill 0/15/100. The Chance log must show sleeping true (sleep-state 7), selected item weight/value, witness penalty, cap and final chance. If sleeping is false, collect the log before assuming balance is the cause. Verify fully awake target loses sleep assistance and witnesses retain full influence. Diagnostics are limited to one changed selection/state/result per second.
+
+## 0.1.5 runtime state access
+
+On 1.6.629+ including installed 1.7.104, inspect a sleeping NPC: diagnostic actor-state-offset must be C0, sleep-state 7, sleeping true. Awake targets must show sleeping false and seated targets must get only sitting treatment. SE 1.5.97 uses B8 and needs a separate live check. Chance and bump sleep exclusion use the same runtime-aware accessor. Existing math balance and saved state are unchanged.
