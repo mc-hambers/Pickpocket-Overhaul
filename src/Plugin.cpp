@@ -106,7 +106,17 @@ std::int32_t chance(float thiefSkill,float targetSkill,std::uint32_t value,float
     // Same argument order as vanilla ComputePickpocketSuccess. Apply perk/item
     // entry points before independent attention/witness penalties and final cap.
     RE::BGSEntryPoint::HandleEntryPoint(RE::BGSEntryPoint::ENTRY_POINT::kModPickpocketChance,thief,target,item,&hand);
-    return finalChance(hand,thiefSkill,f,config);
+    const auto result=finalChance(hand,thiefSkill,f,config);
+    // Bounded diagnostic: one record at most per second when selection/state/result
+    // changes. No actor pointers or growing per-item diagnostic cache are retained.
+    struct Trace {RE::FormID target=0,item=0;bool sleeping=false;int result=-1;Clock::time_point time{};};
+    static Trace trace;
+    const auto now=Clock::now();const auto itemID=item?item->GetFormID():0;
+    if((trace.target!=target->GetFormID()||trace.item!=itemID||trace.sleeping!=f.sleeping||trace.result!=result)&&now-trace.time>=std::chrono::seconds(1)){
+        SKSE::log::info("Chance target {:08X}, item {:08X}: sleep-state {}, sleeping {}, skill {:.1f}, weight {:.2f}, value {}, witnesses {:.1f}, cap {:.1f}, chance {}",target->GetFormID(),itemID,static_cast<unsigned>(target->GetSitSleepState()),f.sleeping,thiefSkill,weight,value,f.witnessPenalty,cachedCap.load(),result);
+        trace={target->GetFormID(),itemID,f.sleeping,result,now};
+    }
+    return result;
 }
 template<unsigned Index>
 std::int32_t chanceSite(float skill,float targetSkill,std::uint32_t value,float weight,RE::Actor* thief,RE::Actor* target,bool detected,RE::TESForm* item) {
@@ -217,4 +227,4 @@ case SKSE::MessagingInterface::kPreLoadGame:active=false;++session;break;
 case SKSE::MessagingInterface::kNewGame:clear(nullptr);[[fallthrough]];
 case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterface::kPostLoadGame&&!e->data)break;lastTick=Clock::now();active=hookReady.load();distanceOverride();break;default:break;}}
 }
-SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.3 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
+SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.4 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}

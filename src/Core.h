@@ -44,7 +44,7 @@ inline float cap(const Situation& f,const Config& c) {
     if(f.facing&&f.detected&&!f.sleeping&&!f.focusedElsewhere&&d<.7f)return 0;
     const float eyes=std::clamp((attention(f)+std::max(0.f,finite(f.witnessPenalty))*c.witness)/100.f,0.f,1.f);
     return std::clamp(c.maximum-c.awareness*eyes+c.distraction*d-c.weight*(f.sleeping?2.f:1.f)*weightBurden(f.weight)-
-        c.value*valueBurden(f.value)-c.profile*std::clamp(finite(f.profileRisk),-1.f,1.f),0.f,c.maximum);
+        c.value*(f.sleeping?.25f:1.f)*valueBurden(f.value)-c.profile*(f.sleeping?.25f:1.f)*std::clamp(finite(f.profileRisk),-1.f,1.f),0.f,c.maximum);
 }
 inline float handChance(float weight,unsigned value,const Config&,float skill) {
     const float trained=std::clamp(finite(skill),0.f,100.f)/100;
@@ -55,7 +55,7 @@ inline float handChance(float weight,unsigned value,const Config&,float skill) {
 inline int finalChance(float hand,float skill,const Situation& f,const Config& c) {
     const float trained=std::clamp(finite(skill),0.f,100.f)/100;
     const float burden=weightBurden(f.weight);
-    const float sleepHelp=f.sleeping?70.f*(1.f-burden)-c.weight*burden:0.f;
+    const float sleepHelp=f.sleeping?95.f*(1.f-burden*burden)-c.weight*burden:0.f;
     const float raw=finite(hand)+sleepHelp+c.distraction*distraction(f)*(.5f+trained);
     return int(std::floor(std::clamp(finite(raw),0.f,cap(f,c))));
 }
