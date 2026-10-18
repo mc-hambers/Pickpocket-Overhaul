@@ -40,3 +40,7 @@ With a valid awake witness seeing both player and target, compare Witness streng
 ## 0.1.10 bump reaction acceptance
 
 Compare the SAME item on the SAME target before contact, within six unpaused seconds of an accepted bump, after expiry, and after the third bump. Logs must show bump-active true, positive remaining time and misdirection24 during a valid window. Test no new witnesses versus witnesses reacting to contact, prior suspicion, menu pauses, and unsuccessful native attribution in crowded contacts. Target turning alone must not outweigh the valid distraction; third-bump suspicion intentionally can reduce chance.
+
+## 0.1.11 skill/weather/time
+
+Compare skill0/15/50/100 for coin purses, rings and heavy weapons, same target/environment. Cap should rise more for small items and never exceed maximum or bypass direct observation. Compare before/after relevant perks; execution baseline itself is skill-independent. Test fortified skill, sleep/witness/age and misdirection interactions. Force rain/storm/clear and weather transitions outdoors versus interiors, guards versus civilians. Compare00:00/06:00/12:00/18:00: guards must have time-attention0 as victims and witnesses. Logs must report the new terms. Automated calculations are not live engine acceptance.

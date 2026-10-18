@@ -1,10 +1,10 @@
 # Pickpocket Overhaul
 
-SKSE awareness-based pickpocketing for Skyrim SE/AE. **0.1.10 development preview**, not the finished 1.0 release. Gameplay validation is pending.
+SKSE awareness-based pickpocketing for Skyrim SE/AE. **0.1.11 development preview**, not the finished 1.0 release. Gameplay validation is pending.
 
-## Chance and situational ceiling (0.1.10)
+## Chance and situational ceiling (0.1.11)
 
-The old skill-scaled minimum/maximum cap is removed. Skill no longer sets the ceiling. Starting balance strengths in points:
+The situational ceiling now includes bounded skill relief, strongest on light items. It is not a minimum success chance. Starting balance strengths in points:
 
 - Awareness: 50 penalty points (includes target attention, detection, facing, proximity, suspicion and witnesses).
 - Distractions: up to 20 relief points.
@@ -14,17 +14,17 @@ The old skill-scaled minimum/maximum cap is removed. Skill no longer sets the ce
 
 These are independent strengths, not percentages of the displayed chance. The absolute maximum remains adjustable, default 98; there is no 50% floor. An awake NPC facing and detecting the player blocks theft unless a strong distraction or diverted focus breaks that observation. Skill and perks cannot bypass this gate.
 
-Actual chance comes from skill, reduced handling/security losses as skill improves, vanilla pickpocket perk/item entry points, and skill-dependent use of distraction. The final integer is clamped to the situational ceiling. Both native percentage/roll call sites still require successful installation. The ordinary UI text is retained.
+Actual execution starts from 80 points minus ordinary weight/security handling losses. Vanilla pickpocket perk/item entry points modify that execution. Skill primarily raises the cap, most for small items, and still improves use of distractions. The final integer is clamped to the situational ceiling. Both native percentage/roll call sites still require successful installation. The ordinary UI text is retained.
 
 ## MCM crash report and hardening
 
 The author reported a crash opening the MCM. The full crash log is unavailable, so its cause is unconfirmed. The page no longer queries the player actor value from the Papyrus VM: it reads a cached last-inspected-item ceiling. Setting changes queue Standing Pickpocket distance operations onto the game task queue. Readiness/ownership flags are atomic, option-array access is guarded, and changing settings invalidates the cached readout.
 
-The installed log showed a redirected menu chance CALL, which the live-only scan failed to discover; it disabled both hooks and left vanilla's 90% display. Version 0.1.10 discovers the original callers from the running executable on disk and verifies both live instruction contexts before installing. An executable redirected CALL is supported; changed surrounding instructions or a different caller count are rejected. In-game confirmation is still pending.
+The installed log showed a redirected menu chance CALL, which the live-only scan failed to discover; it disabled both hooks and left vanilla's 90% display. Version 0.1.11 discovers the original callers from the running executable on disk and verifies both live instruction contexts before installing. An executable redirected CALL is supported; changed surrounding instructions or a different caller count are rejected. In-game confirmation is still pending.
 
 For eligible player theft, Pickpocket Overhaul owns both chance calculations, superseding other formulas attached to these two CALLs. Inactive and non-player calls retain their previous per-site delegates. Other mods replacing the chance formula require compatibility testing; no companion files are changed.
 
-## Actor-state correction (0.1.10)
+## Actor-state correction (0.1.11)
 
 Sleep, sitting and bump eligibility now read ActorState through CommonLib's runtime-aware AsActorState accessor. The combined SE/AE build's inherited layout uses offset B8, while Skyrim 1.6.629 and newer uses C0; direct inherited reads could therefore report a sleeping NPC as state 0. Chance diagnostics now include the selected actor-state offset. This repairs recognition without another balance change; live confirmation remains pending.
 
@@ -73,3 +73,11 @@ Sleeping relief is calculated from the attention penalty sleep actually removes:
 Witness pressure now subtracts from calculated execution as well as limiting its ceiling, so Witness strength affects low-skill chances below the cap. Witness contributions use their current facing, detection, sitting, scenes, focus and suspicion. Elderly relief likewise affects execution beneath the cap; occupation handling is unchanged. Age/occupation defaults to 7.5 points in native settings, INI and MCM reset. Existing customized INI values are retained. Race, voice, elderly status, age relief and witness strength/loss are logged. Appearance alone cannot establish chronological age; unsupported records remain neutral.
 
 During a recognized first/second light-bump window, immediate facing, proximity and detection reactions do not add target attention. Existing suspicion/failure/menu-interaction pressure and independent witnesses still count. The target is not newly marked as having observed sneaking during that window. Six seconds of active play are allowed; duplicate signals and third-or-later suspicion rules remain. Logs show active/remaining bump window, count, misdirection, facing/detected flags and suspicion.
+
+## Skill, weather and time (0.1.11)
+
+Skill contributes bounded cap relief: normalized skill times lightness times a precision/security allowance, capped at20 points before lightness. Lightness falls logarithmically to zero at weight30. At default settings the allowance is12 points plus partial relief from value (80%) and weight (50%) penalties, still bounded by the20-point limit. Awareness, witnesses, age/occupation, item difficulty and the MCM absolute maximum still apply. Direct undistracted observation remains a hard block. Skill no longer directly ramps execution from5 to100; neutral execution is80 minus20 times normalized weight and12 times normalized value before perks. Perks therefore decide how close execution gets to the skill-adjusted cap. There is no guaranteed chance equal to the cap.
+
+Outdoor rainy weather adds6 raw distraction; a rainy weather record with thunder sound/lightning adds12. Current/previous weather blend with the sky transition. Rain does not add distraction inside interior cells; guards receive outdoor weather effects normally.
+
+Time of day changes awake personal attention smoothly: up to+5 at noon, down to-10 at midnight, neutral at06:00/18:00. Guards are entirely exempt from this clock-based adjustment, including when witnessing theft. Other awareness factors continue to apply to guards. Sleeping still zeroes personal attention. Logs include hour, time attention, guard status, weather distraction and skill-cap relief. These are initial balance values pending gameplay verification.
