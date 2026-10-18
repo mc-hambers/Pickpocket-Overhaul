@@ -28,3 +28,7 @@ On 1.6.629+ including installed 1.7.104, inspect a sleeping NPC: diagnostic acto
 ## 0.1.7 supersedes earlier sleeping-balance checks
 
 No 80% baseline, extra sleep handling, doubled sleeping weight penalty or quarter value/occupation penalty remains. Verify sleeping personal attention is zero, witness attention persists, and the same item/skill rules apply to an awake target with zero awareness. Confirm waking restores facing/detection penalties. Runtime-aware state access and diagnostics remain.
+
+## 0.1.8 derived sleep relief
+
+Verify awake execution is unchanged. Sleeping diagnostics must show relief equal to the awake-equivalent awareness loss minus sleeping awareness loss, including identical witness pressure in both. Test target attention, AwarenessPoints0/25/50, heavy items, saturated witnesses, wake transitions and perk/distraction interactions. No fixed sleep bonus or general awake raw-chance penalty applies. The actual theft and menu use the same calculation.

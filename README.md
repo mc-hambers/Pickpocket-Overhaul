@@ -1,8 +1,8 @@
 # Pickpocket Overhaul
 
-SKSE awareness-based pickpocketing for Skyrim SE/AE. **0.1.7 development preview**, not the finished 1.0 release. Gameplay validation is pending.
+SKSE awareness-based pickpocketing for Skyrim SE/AE. **0.1.8 development preview**, not the finished 1.0 release. Gameplay validation is pending.
 
-## Chance and situational ceiling (0.1.7)
+## Chance and situational ceiling (0.1.8)
 
 The old skill-scaled minimum/maximum cap is removed. Skill no longer sets the ceiling. Starting balance strengths in points:
 
@@ -20,11 +20,11 @@ Actual chance comes from skill, reduced handling/security losses as skill improv
 
 The author reported a crash opening the MCM. The full crash log is unavailable, so its cause is unconfirmed. The page no longer queries the player actor value from the Papyrus VM: it reads a cached last-inspected-item ceiling. Setting changes queue Standing Pickpocket distance operations onto the game task queue. Readiness/ownership flags are atomic, option-array access is guarded, and changing settings invalidates the cached readout.
 
-The installed log showed a redirected menu chance CALL, which the live-only scan failed to discover; it disabled both hooks and left vanilla's 90% display. Version 0.1.7 discovers the original callers from the running executable on disk and verifies both live instruction contexts before installing. An executable redirected CALL is supported; changed surrounding instructions or a different caller count are rejected. In-game confirmation is still pending.
+The installed log showed a redirected menu chance CALL, which the live-only scan failed to discover; it disabled both hooks and left vanilla's 90% display. Version 0.1.8 discovers the original callers from the running executable on disk and verifies both live instruction contexts before installing. An executable redirected CALL is supported; changed surrounding instructions or a different caller count are rejected. In-game confirmation is still pending.
 
 For eligible player theft, Pickpocket Overhaul owns both chance calculations, superseding other formulas attached to these two CALLs. Inactive and non-player calls retain their previous per-site delegates. Other mods replacing the chance formula require compatibility testing; no companion files are changed.
 
-## Actor-state correction (0.1.7)
+## Actor-state correction (0.1.8)
 
 Sleep, sitting and bump eligibility now read ActorState through CommonLib's runtime-aware AsActorState accessor. The combined SE/AE build's inherited layout uses offset B8, while Skyrim 1.6.629 and newer uses C0; direct inherited reads could therefore report a sleeping NPC as state 0. Chance diagnostics now include the selected actor-state offset. This repairs recognition without another balance change; live confirmation remains pending.
 
@@ -36,7 +36,7 @@ Sleep, sitting and bump eligibility now read ActorState through CommonLib's runt
 - Attention uses facing, close proximity, detection, observed sneaking, repeat menu interactions, alarm/combat after a closed unsuccessful interaction, nearby guards/alerts, sleeping, sitting, scenes and headtracking another actor.
 - Crowds and recent combat/hit commotion help misdirection. Native IsSmallBump condition plus high-process bump state/timestamp changes detect light engine reactions; recent nearby player movement supplies conservative attribution. First two bumps grant four seconds of distraction (24 raw misdirection, 80% of the default distraction allowance); further bumps within 60 seconds cancel the window and add suspicion. Duplicate events within one second are ignored. No artificial bump dialogue is played. Eating/drinking still uses animation-event adapters.
 - NPC greetings to the player outside the Dialogue Menu reduce attention by 8 points while native IsTalking and IsGreetingPlayer are true. Facing/detected observation can still block theft.
-- Sleeping suppresses the victim's attention: facing, proximity, detection, suspicion, observed sneaking, repeated interactions and nearby alerts do not contribute personal awareness while asleep. Sleeping bystanders cannot witness theft, observe sneaking or visually recognize worn possessions. Awake witnesses retain their own penalties. No direct sleeping chance bonus or special weight/value/occupation multiplier applies; normal skill, perks and item difficulty remain.
+- Sleeping suppresses the victim's attention: facing, proximity, detection, suspicion, observed sneaking, repeated interactions and nearby alerts do not contribute personal awareness while asleep. Sleeping bystanders cannot witness theft, observe sneaking or visually recognize worn possessions. Awake witnesses retain their own penalties. No fixed sleeping bonus or special weight/value/occupation multiplier applies; normal skill, perks and item difficulty remain.
 - Followers do not witness; guild actors require a friendly victim relationship; mapped bandits, beggars and thieves require a shared mapped faction. Other witnesses require visibility to player and victim.
 - Successful menu transfers can record uniquely identifiable stolen item instances. Saved victim, ownership, instance ID and deadlines follow unique-ID changes and identified container transfers. Recognition and stolen status age separately with item value.
 - A victim noticing a loss becomes more suspicious. A living visible victim can report a recognized tracked item equipped by the player once. Giving it to a follower or storing it avoids that equipped-item check. No forced player search or inventory confiscation.
@@ -66,4 +66,6 @@ Complete source and dependency source are in Pickpocket-Overhaul-source.zip. Nat
 
 Copyright (C) 2026 Maxmc. Original mod code is GPL-3.0-or-later. Distributed WITHOUT ANY WARRANTY, including merchantability or fitness for a particular purpose. See LICENSE.txt. Third-party source retains its licenses and exceptions.
 
-The former 80% sleeping baseline is removed. Sleeping affects attention only; it does not establish a minimum success chance.
+The former 80% sleeping baseline is removed. Sleep relief comes from the removed attention penalty; it does not establish a minimum success chance.
+
+Sleeping relief is calculated from the attention penalty sleep actually removes: the awake-equivalent awareness loss minus the sleeping awareness loss, with awake witnesses included in both. That difference helps actual execution below the cap, so the sleep effect is visible even for low skill. There is no fixed sleeping bonus, minimum chance, general awake execution penalty, or sleeping item multiplier. The final situational cap still applies.

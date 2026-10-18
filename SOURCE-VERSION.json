@@ -1,6 +1,6 @@
 {
-  "version": "0.1.7-dev",
-  "source_archive_sha256": "76cda38a656e358d958a063056a112460250b14f96f8206d7e1da5e020bfa830",
+  "version": "0.1.8-dev",
+  "source_archive_sha256": "53193e2d164abcfccf58e3577fe775ff0c9c0f23e0657e5ff93ebf093a71efcd",
   "precompiled_commonlib_sha256": "26d3794ce64c151f186732990a95dc083fe07433ab17561610f75a2ee8a2cb7a",
   "gameplay_tested": false
 }
