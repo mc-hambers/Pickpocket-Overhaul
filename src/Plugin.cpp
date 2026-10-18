@@ -45,7 +45,7 @@ std::vector<RE::ActorHandle> loaded() {std::vector<RE::ActorHandle> out;auto* li
 bool member(RE::Actor* a,const std::vector<RE::TESFaction*>& groups) {return std::any_of(groups.begin(),groups.end(),[&](auto* f){return a->IsInFaction(f);});}
 bool friends(RE::Actor* a,RE::Actor* b) {auto* rel=RE::BGSRelationship::GetRelationship(a->GetActorBase(),b->GetActorBase());return rel&&unsigned(*rel->level)<=unsigned(RE::BGSRelationship::RELATIONSHIP_LEVEL::kFriend);}
 bool shared(RE::Actor* a,RE::Actor* b) {return std::any_of(outlaws.begin(),outlaws.end(),[&](auto* f){return a->IsInFaction(f)&&b->IsInFaction(f);});}
-bool sees(RE::Actor* a,RE::Actor* b) {return a->GetDistance(b)<900&&a->RequestLOS(b)>0&&a->RequestDetectionLevel(b)>0;}
+bool sees(RE::Actor* a,RE::Actor* b) {return a->AsActorState()->GetSitSleepState()!=RE::SIT_SLEEP_STATE::kIsSleeping&&a->GetDistance(b)<900&&a->RequestLOS(b)>0&&a->RequestDetectionLevel(b)>0;}
 bool nativeCondition(RE::Actor* actor,RE::FUNCTION_DATA::FunctionID function) {
     RE::TESConditionItem condition;condition.data.functionData.function=function;condition.data.comparisonValue.f=1.f;
     RE::ConditionCheckParams params(actor,RE::PlayerCharacter::GetSingleton());return condition.IsTrue(params);
@@ -81,7 +81,7 @@ Situation situation(RE::Actor* victim,bool detected,const std::vector<RE::ActorH
     f.misdirection=(s.bumpUntil>playSeconds?24.f:0.f)+(s.commotionUntil>playSeconds?10.f:0.f);
     unsigned count=0;
     for(auto& handle:actors) if(auto other=handle.get();other&&other.get()!=victim&&other->GetParentCell()==victim->GetParentCell()&&other->GetDistance(victim)<700) {
-        if(following(other.get()))continue;
+        if(following(other.get())||other->AsActorState()->GetSitSleepState()==RE::SIT_SLEEP_STATE::kIsSleeping)continue;
         if(++count>64)break;
         if(other->GetDistance(victim)<250&&!following(other.get()))++f.crowd;
         if(other->IsGuard()||other->IsAlarmed())++f.alerted;
@@ -227,4 +227,4 @@ case SKSE::MessagingInterface::kPreLoadGame:active=false;++session;break;
 case SKSE::MessagingInterface::kNewGame:clear(nullptr);[[fallthrough]];
 case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterface::kPostLoadGame&&!e->data)break;lastTick=Clock::now();active=hookReady.load();distanceOverride();break;default:break;}}
 }
-SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.6 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
+SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.7 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
