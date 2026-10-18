@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Maxmc. GPL-3.0-or-later. NO WARRANTY; see LICENSE.txt.
 #include "Core.h"
+#include "ChanceSites.h"
 #include "StandingPickpocketAPI.h"
 #include <atomic>
 #include <chrono>
@@ -20,6 +21,7 @@ std::set<RE::FormID> animated;std::atomic_bool hookReady=false;std::atomic<float
 constexpr auto configPath=L"Data/SKSE/Plugins/PickpocketOverhaul.ini";
 using ChanceFn=std::int32_t(*)(float,float,std::uint32_t,float,RE::Actor*,RE::Actor*,bool,RE::TESForm*);
 ChanceFn original=nullptr;
+ChanceFn previousChance[2]{};
 float* option(int i) {
     switch(i) {case 0:return &config.awareness;case 1:return &config.distraction;case 2:return &config.distance;case 3:return &config.weight;case 4:return &config.value;case 5:return &config.profile;case 6:return &config.witness;case 7:return &config.tagDays;case 8:return &config.recognitionDays;case 9:return &config.maximum;default:return nullptr;}
 }
@@ -80,20 +82,47 @@ std::int32_t chance(float thiefSkill,float targetSkill,std::uint32_t value,float
     RE::BGSEntryPoint::HandleEntryPoint(RE::BGSEntryPoint::ENTRY_POINT::kModPickpocketChance,thief,target,item,&hand);
     return finalChance(hand,thiefSkill,f,config);
 }
+template<unsigned Index>
+std::int32_t chanceSite(float skill,float targetSkill,std::uint32_t value,float weight,RE::Actor* thief,RE::Actor* target,bool detected,RE::TESForm* item) {
+    if(!active||!thief||!thief->IsPlayerRef()||!valid(target))return previousChance[Index](skill,targetSkill,value,weight,thief,target,detected,item);
+    return chance(skill,targetSkill,value,weight,thief,target,detected,item);
+}
+bool executableAddress(std::uintptr_t address) {
+    MEMORY_BASIC_INFORMATION info{};
+    if(!VirtualQuery(reinterpret_cast<void*>(address),&info,sizeof(info))||info.State!=MEM_COMMIT||(info.Protect&(PAGE_GUARD|PAGE_NOACCESS)))return false;
+    return (info.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))!=0;
+}
 bool installChance() {
-    REL::Relocation<std::uintptr_t> target{RELOCATION_ID(25822,26379)};original=reinterpret_cast<ChanceFn>(target.address());
-    const auto seg=REL::Module::get().segment(REL::Segment::textx);std::vector<std::uintptr_t> calls;
-    auto* bytes=reinterpret_cast<const std::uint8_t*>(seg.address());
-    for(std::size_t i=0;i+5<=seg.size();++i)if(bytes[i]==0xE8) {std::int32_t delta;std::memcpy(&delta,bytes+i+1,4);if(seg.address()+i+5+delta==target.address())calls.push_back(seg.address()+i);}
-    if(calls.size()!=2){
-        for(auto address:calls)SKSE::log::error("Remaining direct chance caller RVA {:X}",address-REL::Module::get().base());
-        const auto version=REL::Module::get().version();
-        if(version.major()==1&&version.minor()==7&&version.patch()==104)
-            for(unsigned rva:{0x759CBCu,0x911523u}){const auto* p=reinterpret_cast<const std::uint8_t*>(REL::Module::get().base()+rva);SKSE::log::error("Audited 1.7.104 chance site {:X}: {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}",rva,p[0],p[1],p[2],p[3],p[4],p[5]);}
-        SKSE::log::error("Unsupported chance call-site count {}; no hooks installed",calls.size());return false;}
-    SKSE::AllocTrampoline(calls.size()*16+64);
-    for(auto address:calls){SKSE::GetTrampoline().write_call<5>(address,chance);SKSE::log::info("Shared chance call site RVA {:X}",address-REL::Module::get().base());}
-    return true;
+    try {
+        REL::Relocation<std::uintptr_t> target{RELOCATION_ID(25822,26379)};original=reinterpret_cast<ChanceFn>(target.address());
+        auto& module=REL::Module::get();const auto base=module.base();
+        const std::filesystem::path path(module.filePath().data());
+        std::ifstream input(path,std::ios::binary|std::ios::ate);
+        if(!input)throw std::runtime_error("Cannot open running executable");
+        const auto size=input.tellg();if(size<=0||size>512*1024*1024)throw std::runtime_error("Invalid executable size");
+        std::vector<std::uint8_t> file(static_cast<std::size_t>(size));input.seekg(0);
+        if(!input.read(reinterpret_cast<char*>(file.data()),static_cast<std::streamsize>(file.size())))throw std::runtime_error("Cannot read executable");
+        const auto sites=Hooks::discover(file,target.address()-base);
+        if(sites.size()!=2)throw std::runtime_error("Expected exactly two original chance callers");
+        const auto text=module.segment(REL::Segment::textx);
+        for(unsigned i=0;i<2;++i){const auto address=base+sites[i].rva;
+            if(address<text.address()+8||address+13>text.address()+text.size())throw std::runtime_error("Chance caller outside executable text");
+            const std::span<const std::uint8_t> live(reinterpret_cast<const std::uint8_t*>(address-8),21);
+            if(!Hooks::contextMatches(file,sites[i],live))throw std::runtime_error("Chance caller instruction context changed");
+            const auto delegate=static_cast<std::uintptr_t>(Hooks::destination(live,8,address));
+            if(!executableAddress(delegate))throw std::runtime_error("Previous chance destination is not executable");
+            previousChance[i]=reinterpret_cast<ChanceFn>(delegate);
+            SKSE::log::info("Verified chance caller RVA {:X}; {} destination {:X}",sites[i].rva,delegate==target.address()?"original":"redirected",delegate);
+        }
+        // Validate both locations before modifying either. Separate delegates preserve
+        // prior behavior for inactive/non-player calls without double-applying perks.
+        SKSE::AllocTrampoline(128);
+        auto& trampoline=SKSE::GetTrampoline();
+        trampoline.write_call<5>(base+sites[0].rva,chanceSite<0>);
+        trampoline.write_call<5>(base+sites[1].rva,chanceSite<1>);
+        SKSE::log::info("Installed both shared chance hooks (menu and theft roll); player chances owned by Pickpocket Overhaul");
+        return true;
+    }catch(const std::exception& e){SKSE::log::error("Chance hook validation failed: {}; overhaul disabled",e.what());return false;}
 }
 RE::ExtraDataList* instance(RE::TESObjectREFR* container,const Stolen& s) {
     if(!container)return nullptr;auto inv=container->GetInventory([&](RE::TESBoundObject& o){return o.GetFormID()==s.form;});
@@ -161,4 +190,4 @@ case SKSE::MessagingInterface::kPreLoadGame:active=false;++session;break;
 case SKSE::MessagingInterface::kNewGame:clear(nullptr);[[fallthrough]];
 case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterface::kPostLoadGame&&!e->data)break;lastTick=Clock::now();active=hookReady.load();distanceOverride();break;default:break;}}
 }
-SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.1 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
+SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.2 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
