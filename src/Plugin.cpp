@@ -88,7 +88,12 @@ Situation situation(RE::Actor* victim,bool detected,const std::vector<RE::ActorH
         if(!witnessCounts(following(other.get()),member(other.get(),guilds),member(other.get(),outlaws),friends(other.get(),victim),shared(other.get(),victim)))continue;
         if(!sees(other.get(),player)||other->RequestLOS(victim)<=0)continue;
         auto it=states.find(other->GetFormID());float suspicious=it==states.end()?0:it->second.suspicion;
-        f.witnessPenalty+=std::clamp(3.f+suspicious*.12f+(other->IsGuard()?4:0),2.f,12.f);
+        Situation observer;observer.attention=25+suspicious;observer.detected=true;
+        observer.detection=std::clamp(float(other->RequestDetectionLevel(player))/100.f,0.f,1.f);
+        observer.facing=std::abs(other->GetHeadingAngle(player->GetPosition(),false))<70;
+        observer.close=other->GetDistance(player)<65;observer.sitting=other->AsActorState()->IsSitting();observer.talking=other->GetCurrentScene()!=nullptr;
+        if(auto* process=other->GetActorRuntimeData().currentProcess){auto focus=process->GetHeadtrackTarget().get();observer.focusedElsewhere=focus&&focus.get()!=player;}
+        f.witnessPenalty+=std::clamp(attention(observer)*.12f+(other->IsGuard()?4:0),0.f,12.f);
     }
     f.witnessPenalty=std::min(f.witnessPenalty,45.f);return f;
 }
@@ -101,7 +106,10 @@ std::int32_t chance(float thiefSkill,float targetSkill,std::uint32_t value,float
     auto actors=loaded();auto f=situation(target,detected,actors);f.weight=weight;f.value=value;
     f.detection=std::clamp(float(target->RequestDetectionLevel(thief))/100.f,0.f,1.f);
     f.profileRisk=target->IsGuard()?1.f:member(target,outlaws)?.4f:0.f;
-    const auto race=target->GetRace();if(race&&(race->GetFormID()==0x67CD8||race->GetFormID()==0xA82BA))f.profileRisk=std::max(-1.f,f.profileRisk-.75f);
+    const auto race=target->GetRace();auto* base=target->GetActorBase();auto* baseRace=base->GetRace();auto* voice=base->GetVoiceType();
+    if(!voice)if(auto* face=base->GetRootFaceNPC())voice=face->GetVoiceType();
+    const bool elderly=elderRecord(race?race->GetFormID():0,baseRace?baseRace->GetFormID():0,voice?voice->GetFormID():0);
+    f.ageRelief=elderly?.75f:0.f;
     cachedCap=cap(f,config);float hand=handChance(weight,value,config,thiefSkill);
     // Same argument order as vanilla ComputePickpocketSuccess. Apply perk/item
     // entry points before independent attention/witness penalties and final cap.
@@ -109,12 +117,12 @@ std::int32_t chance(float thiefSkill,float targetSkill,std::uint32_t value,float
     const auto result=finalChance(hand,thiefSkill,f,config);
     // Bounded diagnostic: one record at most per second when selection/state/result
     // changes. No actor pointers or growing per-item diagnostic cache are retained.
-    struct Trace {RE::FormID target=0,item=0;bool sleeping=false;int result=-1;Clock::time_point time{};};
+    struct Trace {RE::FormID target=0,item=0;bool sleeping=false;int result=-1;float witness=-1,profile=-1;Clock::time_point time{};};
     static Trace trace;
     const auto now=Clock::now();const auto itemID=item?item->GetFormID():0;
-    if((trace.target!=target->GetFormID()||trace.item!=itemID||trace.sleeping!=f.sleeping||trace.result!=result)&&now-trace.time>=std::chrono::seconds(1)){
-        SKSE::log::info("Chance target {:08X}, item {:08X}: actor-state-offset {:X}, sleep-state {}, sleeping {}, skill {:.1f}, weight {:.2f}, value {}, witnesses {:.1f}, awareness-loss {:.1f}, sleep-relief {:.1f}, hand {:.1f}, cap {:.1f}, chance {}",target->GetFormID(),itemID,reinterpret_cast<std::uintptr_t>(target->AsActorState())-reinterpret_cast<std::uintptr_t>(target),static_cast<unsigned>(target->AsActorState()->GetSitSleepState()),f.sleeping,thiefSkill,weight,value,f.witnessPenalty,awarenessLoss(f,config),sleepRelief(f,config),hand,cachedCap.load(),result);
-        trace={target->GetFormID(),itemID,f.sleeping,result,now};
+    if((trace.target!=target->GetFormID()||trace.item!=itemID||trace.sleeping!=f.sleeping||trace.result!=result||trace.witness!=config.witness||trace.profile!=config.profile)&&now-trace.time>=std::chrono::seconds(1)){
+        SKSE::log::info("Chance target {:08X}, item {:08X}: actor-state-offset {:X}, sleep-state {}, sleeping {}, skill {:.1f}, weight {:.2f}, value {}, witnesses {:.1f}, awareness-loss {:.1f}, sleep-relief {:.1f}, witness-strength {:.1f}, witness-loss {:.1f}, race {:08X}, voice {:08X}, elderly {}, age-relief {:.2f}, occupation-risk {:.2f}, profile-points {:.2f}, hand {:.1f}, cap {:.1f}, chance {}",target->GetFormID(),itemID,reinterpret_cast<std::uintptr_t>(target->AsActorState())-reinterpret_cast<std::uintptr_t>(target),static_cast<unsigned>(target->AsActorState()->GetSitSleepState()),f.sleeping,thiefSkill,weight,value,f.witnessPenalty,awarenessLoss(f,config),sleepRelief(f,config),config.witness,witnessLoss(f,config),race?race->GetFormID():0,voice?voice->GetFormID():0,elderly,ageBenefit(f,config),f.profileRisk,config.profile,hand,cachedCap.load(),result);
+        trace={target->GetFormID(),itemID,f.sleeping,result,config.witness,config.profile,now};
     }
     return result;
 }
@@ -227,4 +235,4 @@ case SKSE::MessagingInterface::kPreLoadGame:active=false;++session;break;
 case SKSE::MessagingInterface::kNewGame:clear(nullptr);[[fallthrough]];
 case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterface::kPostLoadGame&&!e->data)break;lastTick=Clock::now();active=hookReady.load();distanceOverride();break;default:break;}}
 }
-SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.8 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
+SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.9 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}

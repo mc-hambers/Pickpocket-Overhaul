@@ -5,7 +5,7 @@
 #include <cstdint>
 namespace PO {
 struct Config {
-    float awareness=50,distraction=20,distance=.65f,weight=15,value=10,profile=5,witness=1;
+    float awareness=50,distraction=20,distance=.65f,weight=15,value=10,profile=7.5f,witness=1;
     float tagDays=1,recognitionDays=3,maximum=98;
 };
 inline float finite(float n,float fallback=0) {return std::isfinite(n)?n:fallback;}
@@ -16,13 +16,13 @@ inline void normalize(Config& c) {
     c.distance=std::clamp(finite(c.distance,.65f),.1f,1.f);
     c.weight=std::clamp(finite(c.weight,15),0.f,100.f);
     c.value=std::clamp(finite(c.value,10),0.f,100.f);
-    c.profile=std::clamp(finite(c.profile,5),0.f,100.f);
+    c.profile=std::clamp(finite(c.profile,7.5f),0.f,100.f);
     c.witness=std::clamp(finite(c.witness,1),0.f,3.f);
     c.tagDays=std::clamp(finite(c.tagDays,1),.1f,30.f);
     c.recognitionDays=std::clamp(finite(c.recognitionDays,3),.1f,90.f);
 }
 struct Situation {
-    float attention=25,misdirection=0,witnessPenalty=0,weight=0,profileRisk=0,detection=0;
+    float attention=25,misdirection=0,witnessPenalty=0,weight=0,profileRisk=0,detection=0,ageRelief=0;
     unsigned value=0;
     bool facing=false,close=false,detected=false,sleeping=false,sitting=false,talking=false,speakingToPlayer=false,focusedElsewhere=false;
     unsigned crowd=0,alerted=0;
@@ -42,12 +42,20 @@ inline float awarenessLoss(const Situation& f,const Config& c) {
     const float eyes=std::clamp((attention(f)+std::max(0.f,finite(f.witnessPenalty))*c.witness)/100.f,0.f,1.f);
     return c.awareness*eyes;
 }
+inline bool elderRecord(std::uint32_t race,std::uint32_t baseRace,std::uint32_t voice) {
+    const auto elderRace=[](std::uint32_t id){return id==0x67CD8||id==0xA82BA;};
+    return elderRace(race)||elderRace(baseRace)||voice==0x13AE2||voice==0x13AE1||voice==0x13AD7||voice==0x13AD6;
+}
+inline float ageBenefit(const Situation& f,const Config& c) {return c.profile*std::clamp(finite(f.ageRelief),0.f,1.f);}
+inline float witnessLoss(const Situation& f,const Config& c) {
+    return c.awareness*std::clamp(std::max(0.f,finite(f.witnessPenalty))*c.witness/100.f,0.f,1.f);
+}
 inline float cap(const Situation& f,const Config& c) {
     const float d=distraction(f);
     // A skill/perk bonus cannot rescue an actively watched, undistracted theft.
     if(f.facing&&f.detected&&!f.sleeping&&!f.focusedElsewhere&&d<.7f)return 0;
     return std::clamp(c.maximum-awarenessLoss(f,c)+c.distraction*d-c.weight*weightBurden(f.weight)-
-        c.value*valueBurden(f.value)-c.profile*std::clamp(finite(f.profileRisk),-1.f,1.f),0.f,c.maximum);
+        c.value*valueBurden(f.value)-c.profile*std::clamp(finite(f.profileRisk)-std::clamp(finite(f.ageRelief),0.f,1.f),-1.f,1.f),0.f,c.maximum);
 }
 inline float handChance(float weight,unsigned value,const Config&,float skill) {
     const float trained=std::clamp(finite(skill),0.f,100.f)/100;
@@ -64,7 +72,7 @@ inline float sleepRelief(const Situation& f,const Config& c) {
 }
 inline int finalChance(float hand,float skill,const Situation& f,const Config& c) {
     const float trained=std::clamp(finite(skill),0.f,100.f)/100;
-    const float raw=finite(hand)+sleepRelief(f,c)+c.distraction*distraction(f)*(.5f+trained);
+    const float raw=finite(hand)+sleepRelief(f,c)+ageBenefit(f,c)-witnessLoss(f,c)+c.distraction*distraction(f)*(.5f+trained);
     return int(std::floor(std::clamp(finite(raw),0.f,cap(f,c))));
 }
 struct AttentionState {
