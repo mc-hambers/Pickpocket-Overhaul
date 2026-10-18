@@ -38,12 +38,15 @@ inline float distraction(const Situation& f) {
 }
 inline float weightBurden(float weight) {return std::clamp(std::log1p(std::max(0.f,finite(weight)))/std::log(31.f),0.f,1.f);}
 inline float valueBurden(unsigned value) {return std::clamp(std::log1p(float(value))/std::log(2001.f),0.f,1.f);}
+inline float awarenessLoss(const Situation& f,const Config& c) {
+    const float eyes=std::clamp((attention(f)+std::max(0.f,finite(f.witnessPenalty))*c.witness)/100.f,0.f,1.f);
+    return c.awareness*eyes;
+}
 inline float cap(const Situation& f,const Config& c) {
     const float d=distraction(f);
     // A skill/perk bonus cannot rescue an actively watched, undistracted theft.
     if(f.facing&&f.detected&&!f.sleeping&&!f.focusedElsewhere&&d<.7f)return 0;
-    const float eyes=std::clamp((attention(f)+std::max(0.f,finite(f.witnessPenalty))*c.witness)/100.f,0.f,1.f);
-    return std::clamp(c.maximum-c.awareness*eyes+c.distraction*d-c.weight*weightBurden(f.weight)-
+    return std::clamp(c.maximum-awarenessLoss(f,c)+c.distraction*d-c.weight*weightBurden(f.weight)-
         c.value*valueBurden(f.value)-c.profile*std::clamp(finite(f.profileRisk),-1.f,1.f),0.f,c.maximum);
 }
 inline float handChance(float weight,unsigned value,const Config&,float skill) {
@@ -52,9 +55,16 @@ inline float handChance(float weight,unsigned value,const Config&,float skill) {
     return std::clamp(5+95*trained-20*weightBurden(weight)*(1-.65f*trained)-
         12*valueBurden(value)*(1-.9f*trained),0.f,100.f);
 }
+inline float sleepRelief(const Situation& f,const Config& c) {
+    if(!f.sleeping)return 0;
+    auto awake=f;awake.sleeping=false;
+    // Credit only the awareness loss actually removed by sleep. Witnesses stay
+    // in both evaluations and cannot create or increase this relief.
+    return std::max(0.f,awarenessLoss(awake,c)-awarenessLoss(f,c));
+}
 inline int finalChance(float hand,float skill,const Situation& f,const Config& c) {
     const float trained=std::clamp(finite(skill),0.f,100.f)/100;
-    const float raw=finite(hand)+c.distraction*distraction(f)*(.5f+trained);
+    const float raw=finite(hand)+sleepRelief(f,c)+c.distraction*distraction(f)*(.5f+trained);
     return int(std::floor(std::clamp(finite(raw),0.f,cap(f,c))));
 }
 struct AttentionState {
