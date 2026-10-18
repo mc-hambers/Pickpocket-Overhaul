@@ -36,3 +36,7 @@ Verify awake execution is unchanged. Sleeping diagnostics must show relief equal
 ## 0.1.9 witness and age
 
 With a valid awake witness seeing both player and target, compare Witness strength0/1/3 on the same low-skill item. Log must show raw contribution, configured strength and witness-loss; final chance should fall unless already clamped at0 or cap. Test exclusions and observer facing/sitting/focus. Inspect an ElderRace actor and an ordinary-race actor using a vanilla elderly voice; elderly true and age-relief must appear, with relief responding to Age/occupation points0/7.5. Existing customized INI choices remain unchanged; MCM reset default is7.5.
+
+## 0.1.10 bump reaction acceptance
+
+Compare the SAME item on the SAME target before contact, within six unpaused seconds of an accepted bump, after expiry, and after the third bump. Logs must show bump-active true, positive remaining time and misdirection24 during a valid window. Test no new witnesses versus witnesses reacting to contact, prior suspicion, menu pauses, and unsuccessful native attribution in crowded contacts. Target turning alone must not outweigh the valid distraction; third-bump suspicion intentionally can reduce chance.
