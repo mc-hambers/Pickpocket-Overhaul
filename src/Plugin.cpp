@@ -16,20 +16,24 @@ std::vector<Stolen> stolen;std::atomic_bool active=false,queued=false;std::atomi
 double playSeconds=0;Clock::time_point lastTick=Clock::now();std::jthread worker;
 const StandingPickpocketAPI::V1* standing=nullptr;int ownerToken;
 RE::TESFaction* follower=nullptr;std::vector<RE::TESFaction*> guilds,outlaws;
-std::set<RE::FormID> animated;bool hookReady=false;
+std::set<RE::FormID> animated;std::atomic_bool hookReady=false;std::atomic<float> cachedCap=-1;std::atomic_bool distanceOwned=false;
 constexpr auto configPath=L"Data/SKSE/Plugins/PickpocketOverhaul.ini";
 using ChanceFn=std::int32_t(*)(float,float,std::uint32_t,float,RE::Actor*,RE::Actor*,bool,RE::TESForm*);
 ChanceFn original=nullptr;
 float* option(int i) {
-    switch(i) {case 0:return &config.minimum;case 1:return &config.maximum;case 2:return &config.distance;case 3:return &config.weight;case 4:return &config.value;case 5:return &config.attention;case 6:return &config.witness;case 7:return &config.tagDays;case 8:return &config.recognitionDays;default:return nullptr;}
+    switch(i) {case 0:return &config.awareness;case 1:return &config.distraction;case 2:return &config.distance;case 3:return &config.weight;case 4:return &config.value;case 5:return &config.profile;case 6:return &config.witness;case 7:return &config.tagDays;case 8:return &config.recognitionDays;case 9:return &config.maximum;default:return nullptr;}
 }
-constexpr const wchar_t* keys[]={L"MinimumCap",L"MaximumCap",L"DistanceMultiplier",L"WeightPenalty",L"ValuePenalty",L"AttentionStrength",L"WitnessStrength",L"StolenTagDays",L"RecognitionDays"};
-void distanceOverride() {if(standing&&!standing->SetDistanceOverride(&ownerToken,config.distance))SKSE::log::warn("Standing Pickpocket distance is owned by another mod");}
+constexpr const wchar_t* keys[]={L"AwarenessPoints",L"DistractionPoints",L"DistanceMultiplier",L"WeightPoints",L"ValuePoints",L"ProfilePoints",L"WitnessStrength",L"StolenTagDays",L"RecognitionDays",L"AbsoluteMaximum"};
+void distanceOverride() {distanceOwned=standing&&standing->SetDistanceOverride(&ownerToken,config.distance);}
 float getOption(RE::StaticFunctionTag*,int i) {std::scoped_lock lock(mutex);auto* p=option(i);return p?*p:0;}
-void setOption(RE::StaticFunctionTag*,int i,float value) {std::scoped_lock lock(mutex);auto* p=option(i);if(!p||!std::isfinite(value))return;*p=value;if(i==0&&config.minimum>config.maximum)config.maximum=config.minimum;if(i==1&&config.maximum<config.minimum)config.minimum=config.maximum;normalize(config);for(int n=0;n<9;++n)WritePrivateProfileStringW(L"Settings",keys[n],std::to_wstring(*option(n)).c_str(),configPath);distanceOverride();}
-float currentCap(RE::StaticFunctionTag*) {std::scoped_lock lock(mutex);auto* p=RE::PlayerCharacter::GetSingleton();return cap(p?p->GetActorValue(RE::ActorValue::kPickpocket):0,config);}
-bool ready(RE::StaticFunctionTag*) {return hookReady;}
-bool standingOwned(RE::StaticFunctionTag*) {return standing&&standing->IsDistanceOverridden();}
+void setOption(RE::StaticFunctionTag*,int i,float value) {
+    {std::scoped_lock lock(mutex);auto* p=option(i);if(!p||!std::isfinite(value))return;*p=value;normalize(config);cachedCap=-1;
+    for(int n=0;n<10;++n)WritePrivateProfileStringW(L"Settings",keys[n],std::to_wstring(*option(n)).c_str(),configPath);}
+    if(auto* tasks=SKSE::GetTaskInterface())tasks->AddTask([]{std::scoped_lock lock(mutex);distanceOverride();});
+}
+float currentCap(RE::StaticFunctionTag*) {return cachedCap.load();}
+bool ready(RE::StaticFunctionTag*) {return hookReady.load();}
+bool standingOwned(RE::StaticFunctionTag*) {return distanceOwned.load();}
 bool registerPapyrus(RE::BSScript::IVirtualMachine* vm) {vm->RegisterFunction("GetOption","PO_Native",getOption);vm->RegisterFunction("SetOption","PO_Native",setOption);vm->RegisterFunction("GetCurrentCap","PO_Native",currentCap);vm->RegisterFunction("IsReady","PO_Native",ready);vm->RegisterFunction("IsStandingDistanceOwned","PO_Native",standingOwned);return true;}
 double days() {auto* c=RE::Calendar::GetSingleton();return c?c->GetDaysPassed():0;}
 bool following(RE::Actor* a) {return a&&(a->IsPlayerTeammate()||(follower&&a->IsInFaction(follower)));}
@@ -66,7 +70,11 @@ std::int32_t chance(float thiefSkill,float targetSkill,std::uint32_t value,float
     auto* ini=RE::INISettingCollection::GetSingleton();auto* setting=ini?ini->GetSetting("fActivatePickLength:Interface"):nullptr;
     const float reach=setting&&std::isfinite(setting->data.f)&&setting->data.f>0?setting->data.f:180.f;
     if(thief->GetDistance(target)>reach*config.distance)return 0;
-    auto actors=loaded();auto f=situation(target,detected,actors);float hand=handChance(weight,value,config);
+    auto actors=loaded();auto f=situation(target,detected,actors);f.weight=weight;f.value=value;
+    f.detection=std::clamp(float(target->RequestDetectionLevel(thief))/100.f,0.f,1.f);
+    f.profileRisk=target->IsGuard()?1.f:member(target,outlaws)?.4f:0.f;
+    const auto race=target->GetRace();if(race&&(race->GetFormID()==0x67CD8||race->GetFormID()==0xA82BA))f.profileRisk=std::max(-1.f,f.profileRisk-.75f);
+    cachedCap=cap(f,config);float hand=handChance(weight,value,config,thiefSkill);
     // Same argument order as vanilla ComputePickpocketSuccess. Apply perk/item
     // entry points before independent attention/witness penalties and final cap.
     RE::BGSEntryPoint::HandleEntryPoint(RE::BGSEntryPoint::ENTRY_POINT::kModPickpocketChance,thief,target,item,&hand);
@@ -77,7 +85,12 @@ bool installChance() {
     const auto seg=REL::Module::get().segment(REL::Segment::textx);std::vector<std::uintptr_t> calls;
     auto* bytes=reinterpret_cast<const std::uint8_t*>(seg.address());
     for(std::size_t i=0;i+5<=seg.size();++i)if(bytes[i]==0xE8) {std::int32_t delta;std::memcpy(&delta,bytes+i+1,4);if(seg.address()+i+5+delta==target.address())calls.push_back(seg.address()+i);}
-    if(calls.size()!=2){SKSE::log::error("Unsupported chance call-site count {}; no hooks installed",calls.size());return false;}
+    if(calls.size()!=2){
+        for(auto address:calls)SKSE::log::error("Remaining direct chance caller RVA {:X}",address-REL::Module::get().base());
+        const auto version=REL::Module::get().version();
+        if(version.major()==1&&version.minor()==7&&version.patch()==104)
+            for(unsigned rva:{0x759CBCu,0x911523u}){const auto* p=reinterpret_cast<const std::uint8_t*>(REL::Module::get().base()+rva);SKSE::log::error("Audited 1.7.104 chance site {:X}: {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}",rva,p[0],p[1],p[2],p[3],p[4],p[5]);}
+        SKSE::log::error("Unsupported chance call-site count {}; no hooks installed",calls.size());return false;}
     SKSE::AllocTrampoline(calls.size()*16+64);
     for(auto address:calls){SKSE::GetTrampoline().write_call<5>(address,chance);SKSE::log::info("Shared chance call site RVA {:X}",address-REL::Module::get().base());}
     return true;
@@ -140,12 +153,12 @@ void tick() {
 }
 constexpr std::uint32_t record=0x504F5331;
 void save(SKSE::SerializationInterface* api){std::scoped_lock lock(mutex);if(!api->OpenRecord(record,1))return;api->WriteRecordData(&playSeconds,sizeof(playSeconds));auto count=std::uint32_t(states.size());api->WriteRecordData(&count,4);for(auto& [id,s]:states){api->WriteRecordData(&id,4);api->WriteRecordData(&s,sizeof(s));}count=std::uint32_t(stolen.size());api->WriteRecordData(&count,4);for(auto& s:stolen)api->WriteRecordData(&s,sizeof(s));}
-void clear(SKSE::SerializationInterface*){active=false;++session;std::scoped_lock lock(mutex);states.clear();stolen.clear();animated.clear();playSeconds=0;Events::get().menuVictim=0;}
+void clear(SKSE::SerializationInterface*){active=false;++session;std::scoped_lock lock(mutex);states.clear();stolen.clear();animated.clear();playSeconds=0;cachedCap=-1;Events::get().menuVictim=0;}
 void load(SKSE::SerializationInterface* api){clear(api);std::uint32_t type,version,length;while(api->GetNextRecordInfo(type,version,length)){if(type!=record||version!=1)continue;std::uint32_t count;if(api->ReadRecordData(&playSeconds,sizeof(playSeconds))!=sizeof(playSeconds)||!std::isfinite(playSeconds)||api->ReadRecordData(&count,4)!=4||count>100000)return;for(unsigned i=0;i<count;++i){std::uint32_t id,newID;AttentionState s;if(api->ReadRecordData(&id,4)!=4||api->ReadRecordData(&s,sizeof(s))!=sizeof(s))return;if(api->ResolveFormID(id,newID)&&std::isfinite(s.suspicion))states.emplace(newID,s);}if(api->ReadRecordData(&count,4)!=4||count>100000)return;for(unsigned i=0;i<count;++i){Stolen s;if(api->ReadRecordData(&s,sizeof(s))!=sizeof(s))return;bool validIDs=true;for(auto* id:{&s.victim,&s.form,&s.owner,&s.container,&s.uidBase}){std::uint32_t next=0;if(*id&&!api->ResolveFormID(*id,next)){validIDs=false;break;}if(*id)*id=next;}if(validIDs&&std::isfinite(s.expires)&&std::isfinite(s.recognizesUntil))stolen.push_back(s);}}}
 void message(SKSE::MessagingInterface::Message* e){switch(e->type){case SKSE::MessagingInterface::kPostLoad:{auto h=GetModuleHandleW(L"StandingPickpocket.dll");if(h){auto request=reinterpret_cast<StandingPickpocketAPI::Request>(GetProcAddress(h,"StandingPickpocket_RequestAPI"));if(request)standing=request(1);}distanceOverride();break;}
 case SKSE::MessagingInterface::kDataLoaded:{auto* data=RE::TESDataHandler::GetSingleton();auto faction=[data](unsigned id){return data->LookupForm<RE::TESFaction>(id,"Skyrim.esm");};follower=faction(0x5C84E);for(unsigned id:{0x29DA9u,0x1F259u,0x48362u,0x1BDB3u})if(auto* f=faction(id))guilds.push_back(f);for(unsigned id:{0x1BCC0u,0x60028u,0x29DA9u})if(auto* f=faction(id))outlaws.push_back(f);auto* source=RE::ScriptEventSourceHolder::GetSingleton();auto& events=Events::get();source->AddEventSink<RE::TESContainerChangedEvent>(&events);source->AddEventSink<RE::TESUniqueIDChangeEvent>(&events);source->AddEventSink<RE::TESHitEvent>(&events);RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(&events);hookReady=installChance();worker=std::jthread([](std::stop_token stop){while(!stop.stop_requested()){std::this_thread::sleep_for(std::chrono::milliseconds(500));if(active&&!queued.exchange(true)){auto generation=session.load();SKSE::GetTaskInterface()->AddTask([generation]{queued=false;if(active&&session==generation)tick();});}}});break;}
 case SKSE::MessagingInterface::kPreLoadGame:active=false;++session;break;
 case SKSE::MessagingInterface::kNewGame:clear(nullptr);[[fallthrough]];
-case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterface::kPostLoadGame&&!e->data)break;lastTick=Clock::now();active=hookReady;distanceOverride();break;default:break;}}
+case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterface::kPostLoadGame&&!e->data)break;lastTick=Clock::now();active=hookReady.load();distanceOverride();break;default:break;}}
 }
-SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.0 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<9;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
+SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.1 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}

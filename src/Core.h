@@ -5,40 +5,57 @@
 #include <cstdint>
 namespace PO {
 struct Config {
-    float minimum=50,maximum=98,distance=.65f,weight=8,value=3,attention=.6f,witness=1;
-    float tagDays=1,recognitionDays=3;
+    float awareness=50,distraction=20,distance=.65f,weight=15,value=10,profile=5,witness=1;
+    float tagDays=1,recognitionDays=3,maximum=98;
 };
 inline float finite(float n,float fallback=0) {return std::isfinite(n)?n:fallback;}
 inline void normalize(Config& c) {
-    c.minimum=std::clamp(finite(c.minimum,50),0.f,100.f);
-    c.maximum=std::clamp(finite(c.maximum,98),c.minimum,100.f);
+    c.awareness=std::clamp(finite(c.awareness,50),0.f,100.f);
+    c.distraction=std::clamp(finite(c.distraction,20),0.f,100.f);
+    c.maximum=std::clamp(finite(c.maximum,98),0.f,100.f);
     c.distance=std::clamp(finite(c.distance,.65f),.1f,1.f);
-    c.weight=std::clamp(finite(c.weight,8),0.f,30.f);
-    c.value=std::clamp(finite(c.value,3),0.f,20.f);
-    c.attention=std::clamp(finite(c.attention,.6f),0.f,2.f);
+    c.weight=std::clamp(finite(c.weight,15),0.f,100.f);
+    c.value=std::clamp(finite(c.value,10),0.f,100.f);
+    c.profile=std::clamp(finite(c.profile,5),0.f,100.f);
     c.witness=std::clamp(finite(c.witness,1),0.f,3.f);
     c.tagDays=std::clamp(finite(c.tagDays,1),.1f,30.f);
     c.recognitionDays=std::clamp(finite(c.recognitionDays,3),.1f,90.f);
 }
-inline float cap(float skill,const Config& c) {
-    return std::clamp(c.minimum+std::floor(std::clamp(finite(skill),0.f,100.f)*(c.maximum-c.minimum)/100.f),0.f,100.f);
-}
 struct Situation {
-    float attention=25,misdirection=0,witnessPenalty=0;
+    float attention=25,misdirection=0,witnessPenalty=0,weight=0,profileRisk=0,detection=0;
+    unsigned value=0;
     bool facing=false,close=false,detected=false,sleeping=false,sitting=false,talking=false,focusedElsewhere=false;
     unsigned crowd=0,alerted=0;
 };
 inline float attention(const Situation& f) {
-    return std::clamp(f.attention+(f.facing?22:0)+(f.close?10:0)+(f.detected?18:0)+std::min(f.alerted,3u)*6-
-        (f.sleeping?60:0)-(f.sitting?8:0)-(f.talking&&!f.facing?14:0)-(f.focusedElsewhere?12:0),0.f,100.f);
+    if(f.sleeping)return 0;
+    return std::clamp(finite(f.attention)+(f.facing?22:0)+(f.close?10:0)+
+        std::max(f.detected?18.f:0.f,std::clamp(finite(f.detection),0.f,1.f)*25)+std::min(f.alerted,3u)*6-
+        (f.sitting?8:0)-(f.talking&&!f.facing?14:0)-(f.focusedElsewhere?12:0),0.f,100.f);
 }
-inline float handChance(float weight,unsigned value,const Config& c) {
-    return std::clamp(100.f-c.weight*std::sqrt(std::max(0.f,finite(weight)))-c.value*std::log1p(float(value)),0.f,100.f);
+inline float distraction(const Situation& f) {
+    return std::clamp((finite(f.misdirection)+std::min(f.crowd,6u)*1.5f)/30.f,0.f,1.f);
+}
+inline float weightBurden(float weight) {return std::clamp(std::log1p(std::max(0.f,finite(weight)))/std::log(31.f),0.f,1.f);}
+inline float valueBurden(unsigned value) {return std::clamp(std::log1p(float(value))/std::log(2001.f),0.f,1.f);}
+inline float cap(const Situation& f,const Config& c) {
+    const float d=distraction(f);
+    // A skill/perk bonus cannot rescue an actively watched, undistracted theft.
+    if(f.facing&&f.detected&&!f.sleeping&&!f.focusedElsewhere&&d<.7f)return 0;
+    const float eyes=std::clamp((attention(f)+std::max(0.f,finite(f.witnessPenalty))*c.witness)/100.f,0.f,1.f);
+    return std::clamp(c.maximum-c.awareness*eyes+c.distraction*d-c.weight*weightBurden(f.weight)-
+        c.value*valueBurden(f.value)-c.profile*std::clamp(finite(f.profileRisk),-1.f,1.f),0.f,c.maximum);
+}
+inline float handChance(float weight,unsigned value,const Config&,float skill) {
+    const float trained=std::clamp(finite(skill),0.f,100.f)/100;
+    // Skill reduces handling/security losses, not the environmental ceiling.
+    return std::clamp(5+95*trained-20*weightBurden(weight)*(1-.65f*trained)-
+        12*valueBurden(value)*(1-.9f*trained),0.f,100.f);
 }
 inline int finalChance(float hand,float skill,const Situation& f,const Config& c) {
-    const float distraction=(std::clamp(f.misdirection,0.f,30.f)+std::min(f.crowd,6u)*1.5f)*(1+std::clamp(finite(skill),0.f,100.f)*.0075f);
-    const float raw=finite(hand)-attention(f)*c.attention+distraction-std::max(0.f,f.witnessPenalty)*c.witness;
-    return int(std::floor(std::clamp(finite(raw),0.f,cap(skill,c))));
+    const float trained=std::clamp(finite(skill),0.f,100.f)/100;
+    const float raw=finite(hand)+c.distraction*distraction(f)*(.5f+trained);
+    return int(std::floor(std::clamp(finite(raw),0.f,cap(f,c))));
 }
 struct AttentionState {
     double last=0,bumpUntil=0,lastBump=-100,commotionUntil=0,observedUntil=0,failedUntil=0,interactionUntil=0;
