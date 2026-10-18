@@ -22,22 +22,29 @@ inline void normalize(Config& c) {
     c.recognitionDays=std::clamp(finite(c.recognitionDays,3),.1f,90.f);
 }
 struct Situation {
-    float attention=25,misdirection=0,witnessPenalty=0,weight=0,profileRisk=0,detection=0,ageRelief=0;
+    float attention=25,misdirection=0,witnessPenalty=0,weight=0,profileRisk=0,detection=0,ageRelief=0,hour=-1,weather=0;
     unsigned value=0;
-    bool facing=false,close=false,detected=false,sleeping=false,sitting=false,talking=false,speakingToPlayer=false,focusedElsewhere=false,bumpDistracted=false;
+    bool facing=false,close=false,detected=false,sleeping=false,sitting=false,talking=false,speakingToPlayer=false,focusedElsewhere=false,bumpDistracted=false,guard=false,outdoors=false;
     unsigned crowd=0,alerted=0;
 };
+inline float timeAwareness(float hour,bool guard) {
+    if(guard||!std::isfinite(hour)||hour<0)return 0;
+    const float h=std::fmod(hour,24.f),pi=3.14159265359f;
+    if(h>=6&&h<=18)return 5.f*std::sin((h-6)*pi/12);
+    return -10.f*std::sin(std::fmod(h+6,24.f)*pi/12);
+}
+inline float weatherDistraction(const Situation& f) {return f.outdoors?std::clamp(finite(f.weather),0.f,12.f):0.f;}
 inline float attention(const Situation& f) {
     if(f.sleeping)return 0;
     // A genuine light-bump window suppresses immediate contact/turn reactions,
     // while prior suspicion, failures, interactions and witnesses remain.
     const float reaction=f.bumpDistracted?0.f:(f.facing?22.f:0.f)+(f.close?10.f:0.f)+
         std::max(f.detected?18.f:0.f,std::clamp(finite(f.detection),0.f,1.f)*25);
-    return std::clamp(finite(f.attention)+reaction+std::min(f.alerted,3u)*6-
+    return std::clamp(finite(f.attention)+timeAwareness(f.hour,f.guard)+reaction+std::min(f.alerted,3u)*6-
         (f.sitting?8:0)-(f.speakingToPlayer?8:0)-(f.talking&&!f.facing?14:0)-(f.focusedElsewhere?12:0),0.f,100.f);
 }
 inline float distraction(const Situation& f) {
-    return std::clamp((finite(f.misdirection)+std::min(f.crowd,6u)*1.5f)/30.f,0.f,1.f);
+    return std::clamp((finite(f.misdirection)+weatherDistraction(f)+std::min(f.crowd,6u)*1.5f)/30.f,0.f,1.f);
 }
 inline float weightBurden(float weight) {return std::clamp(std::log1p(std::max(0.f,finite(weight)))/std::log(31.f),0.f,1.f);}
 inline float valueBurden(unsigned value) {return std::clamp(std::log1p(float(value))/std::log(2001.f),0.f,1.f);}
@@ -53,18 +60,22 @@ inline float ageBenefit(const Situation& f,const Config& c) {return c.profile*st
 inline float witnessLoss(const Situation& f,const Config& c) {
     return c.awareness*std::clamp(std::max(0.f,finite(f.witnessPenalty))*c.witness/100.f,0.f,1.f);
 }
-inline float cap(const Situation& f,const Config& c) {
+inline float skillCapRelief(const Situation& f,const Config& c,float skill) {
+    const float trained=std::clamp(finite(skill),0.f,100.f)/100;
+    const float lightness=1.f-weightBurden(f.weight);
+    return trained*lightness*std::min(20.f,12.f+.8f*c.value*valueBurden(f.value)+.5f*c.weight*weightBurden(f.weight));
+}
+inline float cap(const Situation& f,const Config& c,float skill=0) {
     const float d=distraction(f);
     // A skill/perk bonus cannot rescue an actively watched, undistracted theft.
     if(f.facing&&f.detected&&!f.sleeping&&!f.focusedElsewhere&&d<.7f)return 0;
-    return std::clamp(c.maximum-awarenessLoss(f,c)+c.distraction*d-c.weight*weightBurden(f.weight)-
+    return std::clamp(c.maximum-awarenessLoss(f,c)+c.distraction*d+skillCapRelief(f,c,skill)-c.weight*weightBurden(f.weight)-
         c.value*valueBurden(f.value)-c.profile*std::clamp(finite(f.profileRisk)-std::clamp(finite(f.ageRelief),0.f,1.f),-1.f,1.f),0.f,c.maximum);
 }
-inline float handChance(float weight,unsigned value,const Config&,float skill) {
-    const float trained=std::clamp(finite(skill),0.f,100.f)/100;
-    // Skill reduces handling/security losses, not the environmental ceiling.
-    return std::clamp(5+95*trained-20*weightBurden(weight)*(1-.65f*trained)-
-        12*valueBurden(value)*(1-.9f*trained),0.f,100.f);
+inline float handChance(float weight,unsigned value,const Config&,float /*skill*/) {
+    // Perk entry points modify execution. Skill controls the situational cap
+    // and use of distractions rather than this neutral item-handling baseline.
+    return std::clamp(80.f-20.f*weightBurden(weight)-12.f*valueBurden(value),0.f,100.f);
 }
 inline float sleepRelief(const Situation& f,const Config& c) {
     if(!f.sleeping)return 0;
@@ -76,7 +87,7 @@ inline float sleepRelief(const Situation& f,const Config& c) {
 inline int finalChance(float hand,float skill,const Situation& f,const Config& c) {
     const float trained=std::clamp(finite(skill),0.f,100.f)/100;
     const float raw=finite(hand)+sleepRelief(f,c)+ageBenefit(f,c)-witnessLoss(f,c)+c.distraction*distraction(f)*(.5f+trained);
-    return int(std::floor(std::clamp(finite(raw),0.f,cap(f,c))));
+    return int(std::floor(std::clamp(finite(raw),0.f,cap(f,c,skill))));
 }
 struct AttentionState {
     double last=0,bumpUntil=0,lastBump=-100,commotionUntil=0,observedUntil=0,failedUntil=0,interactionUntil=0;

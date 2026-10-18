@@ -69,8 +69,23 @@ void observeBumps(const std::vector<RE::ActorHandle>& actors,RE::PlayerCharacter
     }
     std::erase_if(bumpObservations,[&](const auto& entry){return !nearby.contains(entry.first);});
 }
+float weatherNoise(RE::TESWeather* weather) {
+    if(!weather||!weather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy))return 0;
+    bool thunder=weather->data.thunderLightningFrequency>0;
+    for(auto* sound:weather->sounds)if(sound&&sound->type.get()==RE::TESWeather::SoundType::kThunder)thunder=true;
+    return thunder?12.f:6.f;
+}
+void environment(RE::Actor* actor,Situation& facts,bool includeWeather=true) {
+    facts.guard=actor->IsGuard();if(auto* calendar=RE::Calendar::GetSingleton())facts.hour=calendar->GetHour();
+    auto* cell=actor->GetParentCell();facts.outdoors=cell&&!cell->IsInteriorCell();
+    if(!includeWeather||!facts.outdoors)return;
+    if(auto* sky=RE::Sky::GetSingleton()){
+        const float blend=std::clamp(finite(sky->currentWeatherPct,1),0.f,1.f);
+        facts.weather=sky->currentWeather?weatherNoise(sky->currentWeather)*blend+weatherNoise(sky->lastWeather)*(1-blend):weatherNoise(sky->lastWeather);
+    }
+}
 Situation situation(RE::Actor* victim,bool detected,const std::vector<RE::ActorHandle>& actors) {
-    auto* player=RE::PlayerCharacter::GetSingleton();auto& s=states[victim->GetFormID()];Situation f;
+    auto* player=RE::PlayerCharacter::GetSingleton();auto& s=states[victim->GetFormID()];Situation f;environment(victim,f);
     f.attention=25+s.suspicion+(s.failedUntil>playSeconds?25:0)+(s.observedUntil>playSeconds?12:0)+(s.interactionUntil>playSeconds?8:0);
     f.facing=std::abs(victim->GetHeadingAngle(player->GetPosition(),false))<70;
     f.close=victim->GetDistance(player)<65;f.detected=detected;
@@ -94,6 +109,7 @@ Situation situation(RE::Actor* victim,bool detected,const std::vector<RE::ActorH
         observer.facing=std::abs(other->GetHeadingAngle(player->GetPosition(),false))<70;
         observer.close=other->GetDistance(player)<65;observer.sitting=other->AsActorState()->IsSitting();observer.talking=other->GetCurrentScene()!=nullptr;
         if(auto* process=other->GetActorRuntimeData().currentProcess){auto focus=process->GetHeadtrackTarget().get();observer.focusedElsewhere=focus&&focus.get()!=player;}
+        environment(other.get(),observer,false);
         f.witnessPenalty+=std::clamp(attention(observer)*.12f+(other->IsGuard()?4:0),0.f,12.f);
     }
     f.witnessPenalty=std::min(f.witnessPenalty,45.f);return f;
@@ -111,7 +127,7 @@ std::int32_t chance(float thiefSkill,float targetSkill,std::uint32_t value,float
     if(!voice)if(auto* face=base->GetRootFaceNPC())voice=face->GetVoiceType();
     const bool elderly=elderRecord(race?race->GetFormID():0,baseRace?baseRace->GetFormID():0,voice?voice->GetFormID():0);
     f.ageRelief=elderly?.75f:0.f;
-    cachedCap=cap(f,config);float hand=handChance(weight,value,config,thiefSkill);
+    cachedCap=cap(f,config,thiefSkill);float hand=handChance(weight,value,config,thiefSkill);
     // Same argument order as vanilla ComputePickpocketSuccess. Apply perk/item
     // entry points before independent attention/witness penalties and final cap.
     RE::BGSEntryPoint::HandleEntryPoint(RE::BGSEntryPoint::ENTRY_POINT::kModPickpocketChance,thief,target,item,&hand);
@@ -122,7 +138,7 @@ std::int32_t chance(float thiefSkill,float targetSkill,std::uint32_t value,float
     static Trace trace;
     const auto now=Clock::now();const auto itemID=item?item->GetFormID():0;
     if((trace.target!=target->GetFormID()||trace.item!=itemID||trace.sleeping!=f.sleeping||trace.bump!=f.bumpDistracted||trace.result!=result||trace.witness!=config.witness||trace.profile!=config.profile)&&now-trace.time>=std::chrono::seconds(1)){
-        SKSE::log::info("Chance target {:08X}, item {:08X}: actor-state-offset {:X}, sleep-state {}, sleeping {}, skill {:.1f}, weight {:.2f}, value {}, witnesses {:.1f}, awareness-loss {:.1f}, sleep-relief {:.1f}, bump-active {}, bump-left {:.2f}, bump-count {}, misdirection {:.1f}, facing {}, detected {}, suspicion {:.1f}, witness-strength {:.1f}, witness-loss {:.1f}, race {:08X}, voice {:08X}, elderly {}, age-relief {:.2f}, occupation-risk {:.2f}, profile-points {:.2f}, hand {:.1f}, cap {:.1f}, chance {}",target->GetFormID(),itemID,reinterpret_cast<std::uintptr_t>(target->AsActorState())-reinterpret_cast<std::uintptr_t>(target),static_cast<unsigned>(target->AsActorState()->GetSitSleepState()),f.sleeping,thiefSkill,weight,value,f.witnessPenalty,awarenessLoss(f,config),sleepRelief(f,config),f.bumpDistracted,std::max(0.0,states[target->GetFormID()].bumpUntil-playSeconds),states[target->GetFormID()].bumps,f.misdirection,f.facing,f.detected,states[target->GetFormID()].suspicion,config.witness,witnessLoss(f,config),race?race->GetFormID():0,voice?voice->GetFormID():0,elderly,ageBenefit(f,config),f.profileRisk,config.profile,hand,cachedCap.load(),result);
+        SKSE::log::info("Chance target {:08X}, item {:08X}: actor-state-offset {:X}, sleep-state {}, sleeping {}, skill {:.1f}, weight {:.2f}, value {}, witnesses {:.1f}, awareness-loss {:.1f}, sleep-relief {:.1f}, bump-active {}, bump-left {:.2f}, bump-count {}, misdirection {:.1f}, facing {}, detected {}, suspicion {:.1f}, witness-strength {:.1f}, witness-loss {:.1f}, race {:08X}, voice {:08X}, elderly {}, age-relief {:.2f}, occupation-risk {:.2f}, hour {:.2f}, time-attention {:.2f}, guard {}, weather-noise {:.2f}, skill-cap-relief {:.2f}, profile-points {:.2f}, hand {:.1f}, cap {:.1f}, chance {}",target->GetFormID(),itemID,reinterpret_cast<std::uintptr_t>(target->AsActorState())-reinterpret_cast<std::uintptr_t>(target),static_cast<unsigned>(target->AsActorState()->GetSitSleepState()),f.sleeping,thiefSkill,weight,value,f.witnessPenalty,awarenessLoss(f,config),sleepRelief(f,config),f.bumpDistracted,std::max(0.0,states[target->GetFormID()].bumpUntil-playSeconds),states[target->GetFormID()].bumps,f.misdirection,f.facing,f.detected,states[target->GetFormID()].suspicion,config.witness,witnessLoss(f,config),race?race->GetFormID():0,voice?voice->GetFormID():0,elderly,ageBenefit(f,config),f.profileRisk,f.hour,timeAwareness(f.hour,f.guard),f.guard,weatherDistraction(f),skillCapRelief(f,config,thiefSkill),config.profile,hand,cachedCap.load(),result);
         trace={target->GetFormID(),itemID,f.sleeping,f.bumpDistracted,result,config.witness,config.profile,now};
     }
     return result;
@@ -236,4 +252,4 @@ case SKSE::MessagingInterface::kPreLoadGame:active=false;++session;break;
 case SKSE::MessagingInterface::kNewGame:clear(nullptr);[[fallthrough]];
 case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterface::kPostLoadGame&&!e->data)break;lastTick=Clock::now();active=hookReady.load();distanceOverride();break;default:break;}}
 }
-SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.10 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
+SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.11 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
