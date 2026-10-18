@@ -24,13 +24,16 @@ inline void normalize(Config& c) {
 struct Situation {
     float attention=25,misdirection=0,witnessPenalty=0,weight=0,profileRisk=0,detection=0,ageRelief=0;
     unsigned value=0;
-    bool facing=false,close=false,detected=false,sleeping=false,sitting=false,talking=false,speakingToPlayer=false,focusedElsewhere=false;
+    bool facing=false,close=false,detected=false,sleeping=false,sitting=false,talking=false,speakingToPlayer=false,focusedElsewhere=false,bumpDistracted=false;
     unsigned crowd=0,alerted=0;
 };
 inline float attention(const Situation& f) {
     if(f.sleeping)return 0;
-    return std::clamp(finite(f.attention)+(f.facing?22:0)+(f.close?10:0)+
-        std::max(f.detected?18.f:0.f,std::clamp(finite(f.detection),0.f,1.f)*25)+std::min(f.alerted,3u)*6-
+    // A genuine light-bump window suppresses immediate contact/turn reactions,
+    // while prior suspicion, failures, interactions and witnesses remain.
+    const float reaction=f.bumpDistracted?0.f:(f.facing?22.f:0.f)+(f.close?10.f:0.f)+
+        std::max(f.detected?18.f:0.f,std::clamp(finite(f.detection),0.f,1.f)*25);
+    return std::clamp(finite(f.attention)+reaction+std::min(f.alerted,3u)*6-
         (f.sitting?8:0)-(f.speakingToPlayer?8:0)-(f.talking&&!f.facing?14:0)-(f.focusedElsewhere?12:0),0.f,100.f);
 }
 inline float distraction(const Situation& f) {
@@ -88,7 +91,7 @@ inline void decay(AttentionState& s,double now) {
 inline void bump(AttentionState& s,double now) {
     decay(s,now);if(now-s.lastBump<1) return;
     s.lastBump=now;
-    if (++s.bumps<=2) s.bumpUntil=now+4;
+    if (++s.bumps<=2) s.bumpUntil=now+6;
     else {s.bumpUntil=0;s.suspicion=std::min(60.f,s.suspicion+15);}
 }
 // Transient observations are deliberately not saved: loading/re-entering range
