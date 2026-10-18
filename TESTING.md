@@ -32,3 +32,7 @@ No 80% baseline, extra sleep handling, doubled sleeping weight penalty or quarte
 ## 0.1.8 derived sleep relief
 
 Verify awake execution is unchanged. Sleeping diagnostics must show relief equal to the awake-equivalent awareness loss minus sleeping awareness loss, including identical witness pressure in both. Test target attention, AwarenessPoints0/25/50, heavy items, saturated witnesses, wake transitions and perk/distraction interactions. No fixed sleep bonus or general awake raw-chance penalty applies. The actual theft and menu use the same calculation.
+
+## 0.1.9 witness and age
+
+With a valid awake witness seeing both player and target, compare Witness strength0/1/3 on the same low-skill item. Log must show raw contribution, configured strength and witness-loss; final chance should fall unless already clamped at0 or cap. Test exclusions and observer facing/sitting/focus. Inspect an ElderRace actor and an ordinary-race actor using a vanilla elderly voice; elderly true and age-relief must appear, with relief responding to Age/occupation points0/7.5. Existing customized INI choices remain unchanged; MCM reset default is7.5.

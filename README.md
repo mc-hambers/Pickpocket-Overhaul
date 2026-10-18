@@ -1,8 +1,8 @@
 # Pickpocket Overhaul
 
-SKSE awareness-based pickpocketing for Skyrim SE/AE. **0.1.8 development preview**, not the finished 1.0 release. Gameplay validation is pending.
+SKSE awareness-based pickpocketing for Skyrim SE/AE. **0.1.9 development preview**, not the finished 1.0 release. Gameplay validation is pending.
 
-## Chance and situational ceiling (0.1.8)
+## Chance and situational ceiling (0.1.9)
 
 The old skill-scaled minimum/maximum cap is removed. Skill no longer sets the ceiling. Starting balance strengths in points:
 
@@ -10,7 +10,7 @@ The old skill-scaled minimum/maximum cap is removed. Skill no longer sets the ce
 - Distractions: up to 20 relief points.
 - Weight: up to 15 penalty points, logarithmically normalized at 30 weight units.
 - Value/security: up to 10 penalty points, normalized at 2,000 gold.
-- Age/occupation: up to 5 points harder or easier. Guards are harder; recognized ElderRace/ElderRaceVampire reduce profile difficulty. Unknown profiles remain neutral. No guessed numerical NPC ages.
+- Age/occupation: up to 7.5 points harder or easier. Guards are harder; recognized ElderRace/ElderRaceVampire or the four vanilla elderly voice types reduce age difficulty. Unknown profiles remain neutral. No guessed numerical NPC ages.
 
 These are independent strengths, not percentages of the displayed chance. The absolute maximum remains adjustable, default 98; there is no 50% floor. An awake NPC facing and detecting the player blocks theft unless a strong distraction or diverted focus breaks that observation. Skill and perks cannot bypass this gate.
 
@@ -20,11 +20,11 @@ Actual chance comes from skill, reduced handling/security losses as skill improv
 
 The author reported a crash opening the MCM. The full crash log is unavailable, so its cause is unconfirmed. The page no longer queries the player actor value from the Papyrus VM: it reads a cached last-inspected-item ceiling. Setting changes queue Standing Pickpocket distance operations onto the game task queue. Readiness/ownership flags are atomic, option-array access is guarded, and changing settings invalidates the cached readout.
 
-The installed log showed a redirected menu chance CALL, which the live-only scan failed to discover; it disabled both hooks and left vanilla's 90% display. Version 0.1.8 discovers the original callers from the running executable on disk and verifies both live instruction contexts before installing. An executable redirected CALL is supported; changed surrounding instructions or a different caller count are rejected. In-game confirmation is still pending.
+The installed log showed a redirected menu chance CALL, which the live-only scan failed to discover; it disabled both hooks and left vanilla's 90% display. Version 0.1.9 discovers the original callers from the running executable on disk and verifies both live instruction contexts before installing. An executable redirected CALL is supported; changed surrounding instructions or a different caller count are rejected. In-game confirmation is still pending.
 
 For eligible player theft, Pickpocket Overhaul owns both chance calculations, superseding other formulas attached to these two CALLs. Inactive and non-player calls retain their previous per-site delegates. Other mods replacing the chance formula require compatibility testing; no companion files are changed.
 
-## Actor-state correction (0.1.8)
+## Actor-state correction (0.1.9)
 
 Sleep, sitting and bump eligibility now read ActorState through CommonLib's runtime-aware AsActorState accessor. The combined SE/AE build's inherited layout uses offset B8, while Skyrim 1.6.629 and newer uses C0; direct inherited reads could therefore report a sleeping NPC as state 0. Chance diagnostics now include the selected actor-state offset. This repairs recognition without another balance change; live confirmation remains pending.
 
@@ -69,3 +69,5 @@ Copyright (C) 2026 Maxmc. Original mod code is GPL-3.0-or-later. Distributed WIT
 The former 80% sleeping baseline is removed. Sleep relief comes from the removed attention penalty; it does not establish a minimum success chance.
 
 Sleeping relief is calculated from the attention penalty sleep actually removes: the awake-equivalent awareness loss minus the sleeping awareness loss, with awake witnesses included in both. That difference helps actual execution below the cap, so the sleep effect is visible even for low skill. There is no fixed sleeping bonus, minimum chance, general awake execution penalty, or sleeping item multiplier. The final situational cap still applies.
+
+Witness pressure now subtracts from calculated execution as well as limiting its ceiling, so Witness strength affects low-skill chances below the cap. Witness contributions use their current facing, detection, sitting, scenes, focus and suspicion. Elderly relief likewise affects execution beneath the cap; occupation handling is unchanged. Age/occupation defaults to 7.5 points in native settings, INI and MCM reset. Existing customized INI values are retained. Race, voice, elderly status, age relief and witness strength/loss are logged. Appearance alone cannot establish chronological age; unsupported records remain neutral.
