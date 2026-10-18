@@ -58,7 +58,7 @@ void observeBumps(const std::vector<RE::ActorHandle>& actors,RE::PlayerCharacter
     for(auto& handle:actors)if(auto actor=handle.get();actor&&actor->GetParentCell()==player->GetParentCell()&&actor->GetDistance(player)<180){
         auto* process=actor->GetActorRuntimeData().currentProcess;auto* high=process?process->high:nullptr;if(!high)continue;
         const auto id=actor->GetFormID();nearby.insert(id);
-        const auto distance=actor->GetDistance(player);bool contact=moving&&distance<90&&!actor->IsInCombat()&&actor->GetSitSleepState()!=RE::SIT_SLEEP_STATE::kIsSleeping;
+        const auto distance=actor->GetDistance(player);bool contact=moving&&distance<90&&!actor->IsInCombat()&&actor->AsActorState()->GetSitSleepState()!=RE::SIT_SLEEP_STATE::kIsSleeping;
         // The engine exposes bump state, but not its instigator here. Reject an
         // ambiguous crowd contact when another actor is closer to this NPC.
         if(contact)for(auto& otherHandle:actors)if(auto other=otherHandle.get();other&&other.get()!=actor.get()&&other->GetParentCell()==actor->GetParentCell()&&other->GetDistance(actor.get())<distance){contact=false;break;}
@@ -74,7 +74,7 @@ Situation situation(RE::Actor* victim,bool detected,const std::vector<RE::ActorH
     f.attention=25+s.suspicion+(s.failedUntil>playSeconds?25:0)+(s.observedUntil>playSeconds?12:0)+(s.interactionUntil>playSeconds?8:0);
     f.facing=std::abs(victim->GetHeadingAngle(player->GetPosition(),false))<70;
     f.close=victim->GetDistance(player)<65;f.detected=detected;
-    f.sleeping=victim->GetSitSleepState()==RE::SIT_SLEEP_STATE::kIsSleeping;f.sitting=victim->IsSitting();f.talking=victim->GetCurrentScene()!=nullptr;
+    f.sleeping=victim->AsActorState()->GetSitSleepState()==RE::SIT_SLEEP_STATE::kIsSleeping;f.sitting=victim->AsActorState()->IsSitting();f.talking=victim->GetCurrentScene()!=nullptr;
     auto* ui=RE::UI::GetSingleton();
     f.speakingToPlayer=ui&&!ui->IsMenuOpen(RE::DialogueMenu::MENU_NAME)&&nativeCondition(victim,RE::FUNCTION_DATA::FunctionID::kIsTalking)&&nativeCondition(victim,RE::FUNCTION_DATA::FunctionID::kIsGreetingPlayer);
     if(auto* proc=victim->GetActorRuntimeData().currentProcess) {auto focus=proc->GetHeadtrackTarget().get();f.focusedElsewhere=focus&&focus.get()!=player;}
@@ -113,7 +113,7 @@ std::int32_t chance(float thiefSkill,float targetSkill,std::uint32_t value,float
     static Trace trace;
     const auto now=Clock::now();const auto itemID=item?item->GetFormID():0;
     if((trace.target!=target->GetFormID()||trace.item!=itemID||trace.sleeping!=f.sleeping||trace.result!=result)&&now-trace.time>=std::chrono::seconds(1)){
-        SKSE::log::info("Chance target {:08X}, item {:08X}: sleep-state {}, sleeping {}, skill {:.1f}, weight {:.2f}, value {}, witnesses {:.1f}, cap {:.1f}, chance {}",target->GetFormID(),itemID,static_cast<unsigned>(target->GetSitSleepState()),f.sleeping,thiefSkill,weight,value,f.witnessPenalty,cachedCap.load(),result);
+        SKSE::log::info("Chance target {:08X}, item {:08X}: actor-state-offset {:X}, sleep-state {}, sleeping {}, skill {:.1f}, weight {:.2f}, value {}, witnesses {:.1f}, cap {:.1f}, chance {}",target->GetFormID(),itemID,reinterpret_cast<std::uintptr_t>(target->AsActorState())-reinterpret_cast<std::uintptr_t>(target),static_cast<unsigned>(target->AsActorState()->GetSitSleepState()),f.sleeping,thiefSkill,weight,value,f.witnessPenalty,cachedCap.load(),result);
         trace={target->GetFormID(),itemID,f.sleeping,result,now};
     }
     return result;
@@ -227,4 +227,4 @@ case SKSE::MessagingInterface::kPreLoadGame:active=false;++session;break;
 case SKSE::MessagingInterface::kNewGame:clear(nullptr);[[fallthrough]];
 case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterface::kPostLoadGame&&!e->data)break;lastTick=Clock::now();active=hookReady.load();distanceOverride();break;default:break;}}
 }
-SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.4 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
+SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Overhaul 0.1.5 development build; runtime {}",REL::Module::get().version().string());for(int i=0;i<10;++i){wchar_t text[64];auto fallback=std::to_wstring(*option(i));GetPrivateProfileStringW(L"Settings",keys[i],fallback.c_str(),text,64,configPath);wchar_t* end;float v=std::wcstof(text,&end);if(end!=text)*option(i)=v;}normalize(config);auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
