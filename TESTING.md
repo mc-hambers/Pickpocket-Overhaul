@@ -16,3 +16,7 @@ Automated math and file checks are not proof that these engine integrations work
 - Walk/run into an awake NPC and inspect the native small-bump log line. Confirm four-second distraction expiry, no repeated credit while standing against them, and suspicion on the third bump. Test NPC-to-NPC collisions, companions, crowded contacts, cell changes, save/load and pause. The new state is transient and the saved attention/stolen schema is unchanged.
 - Hear an ordinary greeting outside dialogue and compare attention/chance before, during and after speech. No greeting bonus inside Dialogue Menu and no automatic direct-watch bypass.
 - At skill 15, compare a small gold stack on sleeping/awake NPCs, then increase item weight. Check sleeping victim versus awake witnesses and ensure actual roll/menu share the result.
+
+## 0.1.4 sleep diagnostics
+
+Inspect a sleeping NPC and compare weightless gold, 1-weight items, and heavier items at skill 0/15/100. The Chance log must show sleeping true (sleep-state 7), selected item weight/value, witness penalty, cap and final chance. If sleeping is false, collect the log before assuming balance is the cause. Verify fully awake target loses sleep assistance and witnesses retain full influence. Diagnostics are limited to one changed selection/state/result per second.
