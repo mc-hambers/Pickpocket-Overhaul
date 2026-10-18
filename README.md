@@ -1,21 +1,31 @@
 # Pickpocket Overhaul
 
-SKSE awareness-based pickpocketing for Skyrim SE/AE. **0.1.0 development preview**, not the finished 1.0 release. Gameplay validation is pending.
+SKSE awareness-based pickpocketing for Skyrim SE/AE. **0.1.1 development preview**, not the finished 1.0 release. Gameplay validation is pending.
 
-## Chance and cap
+## Chance and situational ceiling (0.1.1)
 
-The existing pickpocket percentage text receives the same native calculation used for the theft roll. No replacement interface text or SWF is shipped. The cap is a ceiling, never a guaranteed success chance:
+The old skill-scaled minimum/maximum cap is removed. Skill no longer sets the ceiling. Starting balance strengths in points:
 
-`cap = minimum + floor(clamp(Pickpocket skill, 0, 100) * (maximum - minimum) / 100)`
+- Awareness: 50 penalty points (includes target attention, detection, facing, proximity, suspicion and witnesses).
+- Distractions: up to 20 relief points.
+- Weight: up to 15 penalty points, logarithmically normalized at 30 weight units.
+- Value/security: up to 10 penalty points, normalized at 2,000 gold.
+- Age/occupation: up to 5 points harder or easier. Guards are harder; recognized ElderRace/ElderRaceVampire reduce profile difficulty. Unknown profiles remain neutral. No guessed numerical NPC ages.
 
-Defaults: minimum 50 at skill 0; maximum 98 at skill 100. Skill 15 therefore gives a 57% ceiling. Artful Dodger 1.11 was inspected as a design reference; its scripts, plugin and assets are not redistributed. Its own default endpoints are 89 and 99.
+These are independent strengths, not percentages of the displayed chance. The absolute maximum remains adjustable, default 98; there is no 50% floor. An awake NPC facing and detecting the player blocks theft unless a strong distraction or diverted focus breaks that observation. Skill and perks cannot bypass this gate.
 
-Weight is the main handling burden, with a smaller logarithmic value penalty. Vanilla pickpocket perk/item entry points act on the handling score. Attention and witness penalties apply independently, then skill amplifies misdirection, then the dynamic cap clamps the final integer. Skill does not erase facing, suspicion or witness penalties.
+Actual chance comes from skill, reduced handling/security losses as skill improves, vanilla pickpocket perk/item entry points, and skill-dependent use of distraction. The final integer is clamped to the situational ceiling. Both native percentage/roll call sites still require successful installation. The ordinary UI text is retained.
+
+## MCM crash report and hardening
+
+The author reported a crash opening the MCM. The full crash log is unavailable, so its cause is unconfirmed. The page no longer queries the player actor value from the Papyrus VM: it reads a cached last-inspected-item ceiling. Setting changes queue Standing Pickpocket distance operations onto the game task queue. Readiness/ownership flags are atomic, option-array access is guarded, and changing settings invalidates the cached readout.
+
+The installed 0.1.0 log also shows only one of two expected chance calls, causing hooks to be disabled. This is a separate unresolved runtime conflict, not proof of the MCM crash cause. 0.1.1 logs the remaining caller and audited site bytes on 1.7.104 without overwriting an unknown hook. It must not claim the overhaul is active when display/roll coverage is incomplete.
 
 ## Included implementation
 
 - Native chance hooks at both direct calls to Skyrim's shared ComputePickpocketSuccess function. Unknown call-site counts disable hook installation. No global fPickPocketMaxChance edits.
-- SkyUI MCM: minimum/maximum cap, reach multiplier, weight/value penalties, attention/witness strength, stolen-tag and recognition timer scales. Settings persist to the INI.
+- SkyUI MCM: situational factor strengths, absolute maximum, reach multiplier, weight/value penalties, attention/witness strength, stolen-tag and recognition timer scales. Settings persist to the INI.
 - Optional Standing Pickpocket API v1 integration owns its distance override and lets that mod disable its distance slider. Older versions without the API cannot have their slider disabled. No companion files are modified.
 - Attention uses facing, close proximity, detection, observed sneaking, repeat menu interactions, alarm/combat after a closed unsuccessful interaction, nearby guards/alerts, sleeping, sitting, scenes and headtracking another actor.
 - Crowds and recent combat/hit commotion help misdirection. Animation-event adapters handle recognized bump/eat/drink events; repeated bumps increase suspicion.

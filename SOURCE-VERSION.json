@@ -1,8 +1,8 @@
 {
-  "version": "0.1.0-dev",
+  "version": "0.1.1-dev",
   "precompiled_download": "CommonLibSSE.lib.xz",
   "precompiled_commonlib": "build/vendor/CommonLibSSE-NG/CommonLibSSE.lib",
   "precompiled_sha256": "26d3794ce64c151f186732990a95dc083fe07433ab17561610f75a2ee8a2cb7a",
   "source_archive": "Pickpocket-Overhaul-source.zip",
-  "source_sha256": "28de42c4cb0125df45fd23471e3bd44f11c7886768b7a5d00fb4be31e154dc70"
+  "source_sha256": "b458f7512c17eb3ae2c83a460879efa9ec2684a6abc09f6f9003615e467e4660"
 }

@@ -1,8 +1,8 @@
 # Runtime acceptance gates before 1.0
 
-- Check startup log: two chance call sites installed, matching SKSE runtime; MCM native status ready.
+- Check startup log: two chance call sites installed, matching SKSE runtime; MCM native status ready. If only one remains, collect the diagnostic site bytes and full crash log; do not claim runtime acceptance or force hooks onto an unknown replacement.
 - Compare ordinary menu percent to actual repeated theft outcomes for weight/value, skill 0/15/50/100, fortified skill, all relevant pickpocket perks, both standing and sneaking, reverse pickpocket and equipped items. No automatic chance equal to cap; no random draws during preview.
-- Adjust both endpoints and penalties; reopen selected items; verify cap/display/roll agree. Check min/max crossing and 0/100 endpoints.
+- Adjust awareness/distraction/weight/value/profile point strengths and absolute maximum; reopen selected items; verify cap/display/roll agree. Compare elderly and guard profiles. Confirm skill cannot bypass direct undistracted observation. Open the MCM and change every slider; getters must only read cached/native settings and distance API changes must run from queued game tasks.
 - With Standing Pickpocket API v1, confirm its distance slider disables and this MCM controls reach; check hotkey, vanilla activation, followers and horse inventory remain intact. Without it, chance distance enforcement still works; menu-opening reach needs separate acceptance.
 - Test native bump tags and animation mods; two distractions then suspicion on repeated contact, no farming by holding contact. Validate seated eating/drinking, conversation facing/rear, crowds, guard/alerted witnesses and follower/guild/outlaw exceptions.
 - Successful theft records only actual stolen instance. Save/load before recognition and expiry, repeated same-form stacks, enchantments, mixed legal/stolen stacks, follower gifts, player chests, dropped items, vendor/fence sales and unique-ID changes. Unrelated ownership must stay untouched.
