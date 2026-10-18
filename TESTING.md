@@ -44,3 +44,43 @@ Compare the SAME item on the SAME target before contact, within six unpaused sec
 ## 0.1.11 skill/weather/time
 
 Compare skill0/15/50/100 for coin purses, rings and heavy weapons, same target/environment. Cap should rise more for small items and never exceed maximum or bypass direct observation. Compare before/after relevant perks; execution baseline itself is skill-independent. Test fortified skill, sleep/witness/age and misdirection interactions. Force rain/storm/clear and weather transitions outdoors versus interiors, guards versus civilians. Compare00:00/06:00/12:00/18:00: guards must have time-attention0 as victims and witnesses. Logs must report the new terms. Automated calculations are not live engine acceptance.
+
+## 0.1.12 acceptance
+
+Compare the same gold stack before and after one small bump, including crowded contacts. Check bump observation acceptance and inventory interaction observed flags in the log. Hidden rear inspection, sleeping victims, and active bump windows must not add interaction suspicion. Visible repeated attempts still do. Verify third-bump suspicion and no NPC-to-NPC contact credit. Native contact attribution remains heuristic; live validation is pending.
+
+## 0.1.13 acceptance
+
+- Stand in front of an awake NPC, then move behind: compare lingering-reaction and displayed chance immediately and after several seconds. Repeated menu queries and paused menus must not advance the fade. Save/reload and cell travel must retain the trail correctly.
+- Compare identical gold before/after a valid small bump. Verify the fade is bypassed during the six-second window, resumes normally afterward, and no bonus is granted on a third suspicious bump. Test absolute maximum 98, 99 and 100 with sufficient execution chance: ceilings are 99, 100 and 100 respectively. Witness and prior suspicion penalties remain.
+- Startup must log the native theft-result hook. Force an actual failed theft and verify its failure log, cancelled bump and 80 percent penalty for 60 unpaused seconds. Successful theft, browsing/closing inventory and unrelated combat must not create a failure. Test reverse pickpocket, older saves, redirected CALL compatibility and save/load during the penalty.
+- File audit confirms one native AttemptPickpocket CALL on installed runtime 1.7.104.0. Other SE/AE call sites and live behavior remain untested. Automated checks do not establish in-game results.
+
+## 0.1.14 acceptance
+
+- Repeat the reported large bump on NPC 00039FB7. Confirm type 1 accepted and a large-bump log with a 10-second window and 36 distraction points; compare a small bump's 6 seconds and 24 points.
+- Test both sizes in combat, crowds, rain, standing/sneaking and around unrelated NPC collisions. Native size plus recent player motion is required; attribution remains heuristic. Both retain +1 maximum point, slope bypass and failed-theft/witness penalties.
+- Test small-to-large upgrades, duplicate callbacks and three separate bumps: an upgrade counts once, duplicates cannot extend indefinitely, and the third separate bump is suspicious for either size.
+- Save/load during a large-bump window, and load an older 0.1.13 trail record. Current records retain size; older records default to small. Live gameplay verification remains pending.
+
+## 0.1.15 acceptance
+
+- Startup must log the verified native failed-pickpocket recognition alarm. On installed runtime 1.7.104.0 the alarm is RVA 6827E0 and the native attempt caller is RVA 759DDB.
+- Steal an identifiable wearable, wait for the owner to notice, then wear it in their sight. Confirm an appropriate vanilla theft/pickpocket reaction and compare the bounty with a failed vanilla pickpocket in the same crime faction. Test default and custom faction pickpocket fines, crime overhauls, no-crime factions and different voice types. Native behavior may suppress dialogue; no forced mismatched voice fallback exists.
+- Wear multiple tracked possessions from the same owner: one scan must generate one alarm, not one fine per item. Save/reload and revisit: reported items must not trigger again. Check expiry, sleeping/absent owners, follower/storage transfers and legal same-form possessions.
+- Compare low/high-value worn items: recognition uses the native failed-pickpocket crime rather than independently calculating a value-based theft fine. Actual failed attempts retain their existing native crime handling and must not receive an extra mod-generated fine.
+- Automatic binary and package checks are not proof of audible dialogue or runtime bounty behavior.
+
+## 0.1.16 acceptance
+
+- Let NPC B watch the player bump NPC A, then bump B. Check B's bump-witness log and its reduced effect/window. Compare an otherwise similar NPC who did not see the collision. Verify asleep, different-cell, obscured, out-of-range and turned-away actors receive no witness record.
+- Repeat distinct contacts with different victims: each seen collision adds 25% wariness up to 75%; one step fades per 30 unpaused seconds. Paused menus must freeze that clock. Small-to-large upgrades and duplicate native signals count once. Victims do not observe their own contact.
+- Confirm partial attention suppression, shorter windows and weaker misdirection in normal UI and actual rolls. A wary NPC facing/detecting the player can still block an insufficiently distracting bump. The +1 ceiling exception and failed-theft penalties remain intact.
+- Save/reload with wariness and an active large bump; check both persist. Load prior v1/v2 trail data: new wariness defaults to zero. Test crowded contacts and repeated-target suspicion separately. Automated core checks do not establish live visibility or perception behavior.
+
+## 0.1.18 skill ceiling balance
+
+- Revisit the reported items at skills 15-17, then 50 and 100. Inspect skill-starting-ceiling, final cap and post-perk execution. Low skill lowers the starting ceiling; no inexperience-loss is subtracted from execution. UI and actual rolls must share the same calculation.
+- Keep skill fixed and compare awareness, witnesses, weight/value, occupation, weather and bump/distraction changes: all must continue to modify the final ceiling. It must not become a fixed skill-only percentage. The valid bump +1 maximum exception stays bounded at 100.
+- Confirm perks still improve execution below the cap, while master-skill handling and direct undistracted observation retain prior behavior. Existing bump wariness, failure penalties and save/load acceptance cases still apply.
+- Numerical log replays are regression fixtures, not runtime proof of a fixed result under changed conditions.
