@@ -1,13 +1,20 @@
 {
-  "version": "0.1.18-dev",
+  "version": "1.0.0",
   "x64_loader": "passed",
   "exports": "passed",
-  "plugin_name": "Pickpocket Overhaul",
-  "core_checks": 21836,
+  "plugin_name": "Pickpocket Chance Rework",
+  "core_checks": 140628,
   "papyrus_compiled": true,
   "esp_esl_flag": true,
   "gameplay_tested": false,
-  "source_tag": "source-0.1.18-dev",
+  "source_tag": "source-1.0.0",
   "ui_and_roll_live_tested": false,
-  "reference_mod_redistributed": false
+  "reference_mod_redistributed": false,
+  "equipped_drops_default_enabled": false,
+  "equipped_drops_gameplay_tested": false,
+  "runtime_papyrus_scripts": 2,
+  "custom_dialogue_removed": true,
+  "ground_pickup_crime_gameplay_tested": false,
+  "guard_confiscation_gameplay_tested": false,
+  "loot_cycle_api_retained": true
 }

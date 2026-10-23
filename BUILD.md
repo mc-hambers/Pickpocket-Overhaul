@@ -15,3 +15,6 @@ Compile Data/Scripts/Source using Caprica for Skyrim with SkyUI SDK and Skyrim/S
 Run python scripts/make_plugin.py to create the ESL-flagged MCM quest and SEQ. Run python scripts/package.py to validate and create runtime/source packages. Run scripts/audit_chance_calls.py against your installed executable/Address Library before runtime testing.
 
 The precompiled CommonLib dependency is optional: CMake normally rebuilds it from the included vendor source. Restore-CommonLib.py extracts the matching library to build/vendor/CommonLibSSE-NG/CommonLibSSE.lib and verifies its SHA-256. Compiler/SDK, Caprica, SkyUI SDK and game Papyrus headers must be obtained separately.
+
+The MCM scripts can be compiled with Caprica or the Skyrim Papyrus compiler using Data/Scripts/Source plus tools/papyrus-headers as import directories and the standard TESV Papyrus flags file. The included minimal API declarations are compile-only; never compile or install them into Data/Scripts. Only PO_MCM.pex and PO_Native.pex belong in the runtime package.
+
