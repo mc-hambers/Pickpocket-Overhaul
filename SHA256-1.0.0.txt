@@ -1,0 +1,2 @@
+f107538e780f11aea219dcaa4bdbdc1ee0ec84662fbb6853ec88243b6ff76fcc  Pickpocket-Chance-Rework-v1.0.0.zip
+c5da8c00f838adecf3273f2c02d7919d9b5e7a901f6635f54aafe47eb28dcaef  Pickpocket-Chance-Rework-v1.0.0-source.zip

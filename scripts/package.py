@@ -18,7 +18,7 @@ report={'version':'1.0.0','x64_loader':'passed','exports':'passed','plugin_name'
 (root/'validation-results.json').write_text(json.dumps(report,indent=2)+'\n')
 with zipfile.ZipFile(runtime,'w',zipfile.ZIP_DEFLATED) as z:
  z.write(dll,'SKSE/Plugins/PickpocketOverhaul.dll')
- for rel in ['PickpocketOverhaul.esp','Seq/PickpocketOverhaul.seq','Scripts/PO_MCM.pex','Scripts/PO_Native.pex']:
+ for rel in ['PickpocketOverhaul.esp','Seq/PickpocketOverhaul.seq','Scripts/PO_MCM.pex','Scripts/PO_Native.pex','Interface/PickpocketOverhaul/home.dds']:
   file=root/'Data'/rel;assert file.is_file()
   if file.suffix=='.esp':assert struct.unpack_from('<I',file.read_bytes(),8)[0]&0x200
   z.write(file,rel)
@@ -26,7 +26,7 @@ with zipfile.ZipFile(source,'w',zipfile.ZIP_DEFLATED) as z:
  prefix='Pickpocket-Chance-Rework-v1.0.0/'
  for name in ['CMakeLists.txt','vcpkg.json','LICENSE.txt','README.md','BUILD.md','TESTING.md','COMPATIBILITY.md','.gitignore','validation-results.json']:
   z.write(root/name,prefix+name)
- for folder in ['src','tests','scripts','vendor/CommonLibSSE-NG','Data/Scripts/Source','third-party','cmake','tools/papyrus-headers']:
+ for folder in ['src','tests','scripts','vendor/CommonLibSSE-NG','Data/Scripts/Source','third-party','cmake','tools/papyrus-headers','artwork','Data/Interface']:
   for file in (root/folder).rglob('*'):
    if file.is_file() and '.git' not in file.parts and '__pycache__' not in file.parts:z.write(file,prefix+file.relative_to(root).as_posix())
  for name in ['ARTFUL-DODGER-REFERENCE.md','chance-call-sites.json','recognition-alarm-audit.json','0.1.26-balance.md','0.1.28-equipped-drops.md','0.1.29-visibility.md','0.1.30-settings.md','0.1.31-recovery.md','0.1.32-slopes.md','0.1.34-recovery-failure.md','0.1.35-panels-navigation.md','0.1.38-ground-identity.md','0.1.42-repeat-recovery-crash.md','0.1.59-ground-crime.json','1.0.0-guard-hook.json','1.0.0-contraband-records.json']:

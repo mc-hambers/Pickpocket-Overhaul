@@ -3,7 +3,7 @@
   "x64_loader": "passed",
   "exports": "passed",
   "plugin_name": "Pickpocket Chance Rework",
-  "core_checks": 140628,
+  "core_checks": 140698,
   "papyrus_compiled": true,
   "esp_esl_flag": true,
   "gameplay_tested": false,

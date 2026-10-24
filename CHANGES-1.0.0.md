@@ -1,14 +1,12 @@
 # Pickpocket Chance Rework 1.0.0
 
-- Rename the display name to Pickpocket Chance Rework; runtime filenames and serialization identity stay unchanged.
-- Add selective guard confiscation and hold/value/recency-aware stolen tags.
-- Contraband includes skooma variants, Sleeping Tree Sap, moon sugar, human flesh/hearts, empty/filled black soul gems, Redwater Skooma, Potion of Blood and lockpicks. Contraband Confiscation auto-disables only our classifier.
-- Confiscated items go to the vanilla hold evidence chest and retain theft ownership there.
-- Artful Dodger controls the hard maximum when installed; no minimum success floor is applied.
-- Add difficulty point skew, updated defaults and a styled two-column MCM.
-- Jewelry equipping belongs exclusively to DPL; PCR keeps the cycle API connection.
-- Preserve the existing awareness, witness, distraction, bump, bad-luck protection, stolen-item tracking and optional equipped-item drop systems. Custom dialogue/confrontation features remain removed.
+- MCM renamed for existing saves and given a Home page with the supplied thumbnail.
+- Added grouped MCM gold thresholds: minimum 20, local valuables 100, high-value goods over 300. Settings persist in the generated INI.
+- Guard confiscation follows stolen-tag expiry, with vanilla-style removal notifications and evidence-chest handling.
+- Added one-time existing-inventory migration and fixed its modern-AE allocation size.
+- Dropping and picking up tracked items preserves original hold and tag timers.
+- Latest source includes all preceding PCR 1.0.0 features and fixes.
 
-## Validation
-
-140,628 behavior checks, Papyrus compilation, native build, package integrity and version metadata checks passed. In-game gameplay and compatibility testing remain pending.
+Native checks and packaging pass (140,698 checks); MCM Papyrus compiles.
+Gameplay, MCM rendering, migration, and compatibility still require in-game testing.
+Release version and runtime filenames remain unchanged.

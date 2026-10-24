@@ -1,45 +1,83 @@
 # Pickpocket Chance Rework 1.0.0
 
-[Download the install ZIP](Pickpocket-Chance-Rework-v1.0.0.zip) · [Versioned release](https://github.com/mc-hambers/Pickpocket-Overhaul/releases/tag/source-1.0.0) · [Complete source archive](Pickpocket-Overhaul-source.zip)
+Release version stays 1.0.0 until explicitly changed. Existing DLL, ESP, scripts,
+INI, serialization ID and log filenames remain unchanged for compatibility.
 
-## Current changes
+## New in 1.0.0
 
-- Rename the display name to Pickpocket Chance Rework; runtime filenames and serialization identity stay unchanged.
-- Add selective guard confiscation and hold/value/recency-aware stolen tags.
-- Contraband includes skooma variants, Sleeping Tree Sap, moon sugar, human flesh/hearts, empty/filled black soul gems, Redwater Skooma, Potion of Blood and lockpicks. Contraband Confiscation auto-disables only our classifier.
-- Confiscated items go to the vanilla hold evidence chest and retain theft ownership there.
-- Artful Dodger controls the hard maximum when installed; no minimum success floor is applied.
-- Add difficulty point skew, updated defaults and a styled two-column MCM.
-- Jewelry equipping belongs exclusively to DPL; PCR keeps the cycle API connection.
-- Preserve the existing awareness, witness, distraction, bump, bad-luck protection, stolen-item tracking and optional equipped-item drop systems. Custom dialogue/confrontation features remain removed.
+- MCM displays Pickpocket Chance Rework, refreshes its old registration once for
+  existing saves, and opens a Home page featuring the mod thumbnail. Settings
+  and Debug remain separate. The internal MCM revision is 101; release remains 1.0.0.
 
-## Installation and settings
+- MCM ownership settings include a Stolen Goods Values section: minimum stolen
+  value (20 gold), local valuables (100 gold), and high-value stolen goods
+  (over 300 gold). Whole-gold sliders persist to the INI and keep thresholds
+  ordered. Local ordinary theft and local valuables both follow tag expiry.
 
-Requires SKSE, the matching Address Library and SkyUI. Optional integrations: Standing Pickpocket, Artful Dodger, Adamant / Hand to Hand, Dynamic Pickpocket Loot, and Contraband Confiscation.
+- Dropping and picking up a tracked stolen item preserves its original hold and
+  fade timer. Ground-reference identity is captured before queued processing;
+  existing history is relocated before considering a new theft. Ground history
+  uses the existing co-save format. In-game drop/pickup testing remains pending.
 
-The settings INI is generated only when absent. Existing preferences are preserved.
-New defaults: karma, inventory-opening penalty, better guard removal, stolen-item
-tracking and dynamic tags on; witness 1x; maximum 97%; recognition 1 day; stolen
-tag base 3 days; reach 0.45x; difficulty skew 1x. Equipped-item drops remain WIP
-and off by default. Gameplay logic is SKSE; MCM and recovery navigation use Papyrus.
+- Fixed modern-AE heap corruption in the first-load stolen-inventory migration:
+  new item-data lists reserve at least 32 bytes before the game constructor runs.
+  Allocation failure safely defers migration. In-game crash regression testing is pending.
 
-## Source and build dependencies
+- Better guard confiscation (on): stolen items worth at least 20 gold from the
+  arresting hold remain eligible until their normal stolen-tag fade timer ends.
+  Stolen items worth more than 300 gold can be confiscated in any hold while
+  their tag remains active. Cheaper items are ignored, except contraband.
+  Contraband includes lockpicks, skooma, moon sugar, Sleeping Tree Sap, human
+  flesh/hearts, black soul gems and blood potions. Quest items are excluded.
+  Confiscated items move to the hold's vanilla evidence chest and show localized
+  item-removal notifications. Evidence ownership and fine/jail behavior remain vanilla.
+  Existing stolen player inventory is imported on the first playable load after
+  updating; the current hold becomes its origin. Existing tracked timers are
+  retained. A co-save migration marker prevents repeating this import.
+  Contraband Confiscation disables only this mod's contraband classification.
+- Dynamic tags (on): tracked goods retain their origin and theft time in the SKSE
+  co-save. While carried, tags can become inconspicuous outside their hold and
+  return on re-entry while identifiable. Permanent expiry still uses the value
+  timer; storage ages tags twice as fast. Ground drops remain NPC-owned.
+- Artful Dodger owns the live hard maximum from fPickPocketMaxChance when present,
+  including karma and bump rolls. No minimum success floor is applied. Its minimum
+  MCM endpoint still determines its skill-based maximum, as its author designed.
+- Difficulty point skew: 0-3x, default 1x. Scales difficulty deductions, keeping
+  caps, perks and beneficial distraction/age effects independent.
+- MCM: two-column gold/cyan section headers, 
+  compatibility provider readout, descriptions, existing hover timer panel.
 
-The complete corresponding source, dependency sources, build scripts and original
-license notices are in [Pickpocket-Overhaul-source.zip](Pickpocket-Overhaul-source.zip). Extract it before
-building. The loose `src/`, tests and scripts mirror this build for browsing.
-The matching precompiled CommonLib remains [CommonLibSSE.lib.xz](CommonLibSSE.lib.xz).
-Use `python Restore-CommonLib.py <extracted-source-root>` to restore and verify it.
-CommonLib can alternatively be rebuilt from the included source. See BUILD.md
-and SOURCE-BUILD.txt for compiler/SDK/Papyrus requirements.
+New INIs default to karma/opening/guard/tracking/tags enabled, witness 1x,
+maximum 97%, recognition 1 day, tag base 3 days, reach 0.45x, point skew 1x.
+Existing INI preferences are preserved. INI is generated only when missing.
+Guard thresholds are configurable under [Settings]: MinimumConfiscationGold=20,
+HighValueStolenGold=300,
+ValuableStolenGold=100, local eligibility follows TagDays (whole in-game days).
 
-## Validation
+Gameplay logic is native SKSE. The MCM and existing recovery path use Papyrus.
+No new dialogue/audio or confrontation systems have been introduced.
+Build/tests are automated evidence, not in-game proof of confiscation, equipping,
+MCM appearance or live UI/roll compatibility. Test these before publishing.
+Full matching source is provided as a separate source ZIP.
 
-140,628 behavior checks, Papyrus compilation, native build, package integrity and version metadata checks passed. **In-game testing remains pending.** Automated tests do not establish
-live MCM, confiscation, equipping, AI or third-party compatibility behavior.
+---
 
-## License
+# Pickpocket Chance Rework 1.0.0
 
-Copyright (C) 2026 Maxmc. GPL-3.0-or-later, without warranty.
-See [LICENSE.txt](LICENSE.txt). Third-party notices and applicable exceptions
-are preserved in the complete source archive and runtime licensing notices.
+An SKSE pickpocket overhaul for Skyrim SE/AE. Development build; in-game validation remains pending.
+
+Pickpocket chances combine awareness, witnesses, distractions, item weight/value, occupation, age, skill and perks. Includes attention decay, bump distractions and wariness, repeated-opening suspicion, per-stolen-stack penalties and optional bad-luck protection. The displayed chance follows the calculated result. Simonrim cap integration and Standing Pickpocket reach integration are built in.
+
+The MCM controls witness strength, maximum chance, reach, stolen-item tracking and tag expiration, recognition duration, equipped-item drops and debug options. Preferences are stored in an automatically generated INI; no INI is shipped. Per-character history is stored in the SKSE co-save.
+
+Tracked stolen tags fade twice as fast in storage containers. Wearing or wielding tracked stolen items can still be recognized within the owner's memory window. This uses the vanilla crime response; there is no custom dialogue or confrontation system.
+
+Equipped-item drops remain WIP and disabled by default. Awake targets can lose their original equipped instance onto the ground. Outside combat they retrieve and equip it after a brief delay, with 270-unit pickup reach and persistent recovery attempts. Combat prioritizes weapons; sleeping thefts retain normal transfers. Ground items retain NPC ownership. Witnessed player theft of these exact dropped items uses the current pickpocket fine as nonviolent crime gold and suppresses the ordinary ground-theft combat alarm. Other ground theft is unchanged. Existing combat is not cancelled.
+
+Removed in 0.1.59: all custom reaction speech, dialogue records/hooks, voice assets/BSA, optional theft alarms/searches/confrontations, their MCM toggle, event script, and event save records. Older co-saves retain ordinary loot, tracking, karma and recovery state; obsolete event records are ignored.
+
+Installation: replace the previous mod installation. Remove the old PickpocketOverhaul.bsa, its Sound/Voice/PickpocketOverhaul.esp directory and PO_TheftResponse.pex if installing manually. Keep your generated INI and saves. Do not delete unrelated files.
+
+The runtime ZIP contains the SKSE DLL, ESL-flagged ESP, two compiled scripts, SEQ and licensing. No custom dialogue, audio archive, Docs directory or bundled configuration.
+
+Build and packaging instructions are in BUILD.md. Source is GPL-3.0-or-later; see LICENSE.txt.

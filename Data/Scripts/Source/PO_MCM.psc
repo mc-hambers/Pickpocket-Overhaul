@@ -10,11 +10,13 @@ Int dropsToggle = -1
 Int trackingToggle = -1
 Int expirationToggle = -1
 Int guardToggle = -1
+Bool nameRefreshed = False
 
 Function SetupPages()
-    Pages = new String[2]
-    Pages[0] = "Settings"
-    Pages[1] = "Debug"
+    Pages = new String[3]
+    Pages[0] = "Home"
+    Pages[1] = "Settings"
+    Pages[2] = "Debug"
 EndFunction
 Event OnConfigInit()
     ModName = "Pickpocket Chance Rework"
@@ -27,7 +29,7 @@ Event OnVersionUpdate(Int version)
     RegisterRecovery()
 EndEvent
 Int Function GetVersion()
-    Return 100
+    Return 101
 EndFunction
 String Function Number(Float value)
     Int rounded
@@ -50,6 +52,13 @@ Function DebugRow(Int index, String label, String value)
     debugOptions[index] = AddTextOption(label, value)
 EndFunction
 Event OnPageReset(String page)
+    PO_Native.SetTimerPreview(-1)
+    If page == "" || page == "Home"
+        debugPage = False
+        LoadCustomContent("PickpocketOverhaul/home.dds", 24, 25)
+        Return
+    EndIf
+    UnloadCustomContent()
     SetCursorFillMode(TOP_TO_BOTTOM)
     debugToggle = -1
     forceToggle = -1
@@ -59,7 +68,7 @@ Event OnPageReset(String page)
     trackingToggle = -1
     expirationToggle = -1
     guardToggle = -1
-    options = new Int[6]
+    options = new Int[9]
     debugOptions = new Int[17]
     PO_Native.SetTimerPreview(-1)
     Int i = 0
@@ -109,6 +118,11 @@ Event OnPageReset(String page)
         SetCursorPosition(12)
         options[4] = AddSliderOption("Pickpocket distance multiplier", PO_Native.GetOption(2), "{2}x")
         options[5] = AddSliderOption("Difficulty point skew", PO_Native.GetOption(10), "{1}x")
+        SetCursorPosition(21)
+        AddHeaderOption("<font color='#D4AF68'>STOLEN GOODS VALUES</font>")
+        options[8] = AddSliderOption("Minimum stolen value", PO_Native.GetOption(13), "{0} gold")
+        options[7] = AddSliderOption("Valuable stolen goods", PO_Native.GetOption(12), "{0} gold")
+        options[6] = AddSliderOption("High-value stolen goods", PO_Native.GetOption(11), "{0} gold")
         Return
     EndIf
     AddHeaderOption("<font color='#80C9DA'>DEBUG & DIAGNOSTICS</font>")
@@ -170,6 +184,9 @@ Int Function FindOption(Int option)
     Return -1
 EndFunction
 Int Function NativeIndex(Int index)
+    If index >= 6 && index <= 8
+        Return index + 5
+    EndIf
     If index == 0
         Return 6
     ElseIf index == 1
@@ -194,7 +211,17 @@ Event OnOptionSliderOpen(Int option)
         Return
     EndIf
     SetSliderDialogStartValue(PO_Native.GetOption(NativeIndex(i)))
-    If i == 0
+    If i >= 6
+        If i == 6
+            SetSliderDialogDefaultValue(300)
+        ElseIf i == 7
+            SetSliderDialogDefaultValue(100)
+        Else
+            SetSliderDialogDefaultValue(20)
+        EndIf
+        SetSliderDialogRange(0, 10000)
+        SetSliderDialogInterval(1)
+    ElseIf i == 0
         SetSliderDialogDefaultValue(1)
         SetSliderDialogRange(0, 3)
         SetSliderDialogInterval(0.1)
@@ -274,6 +301,18 @@ Event OnOptionSelect(Int option)
     EndIf
 EndEvent
 Event OnOptionDefault(Int option)
+    Int threshold = FindOption(option)
+    If threshold >= 6
+        Float gold = 20
+        If threshold == 6
+            gold = 300
+        ElseIf threshold == 7
+            gold = 100
+        EndIf
+        PO_Native.SetOption(NativeIndex(threshold), gold)
+        ForcePageReset()
+        Return
+    EndIf
     If option == guardToggle && option >= 0
         PO_Native.SetBetterGuard(True)
         SetToggleOptionValue(option, True)
@@ -316,7 +355,7 @@ Event OnOptionDefault(Int option)
 EndEvent
 Event OnOptionHighlight(Int option)
     If option == guardToggle && option >= 0
-        SetInfoText("Guards confiscate recent local thefts, local valuables, very valuable stolen goods and contraband. Confiscated items go to the hold evidence chest, like vanilla. Contraband Confiscation disables only our contraband checks. Unknown-origin cheap goods are retained. On by default.")
+        SetInfoText("Guards confiscate identifiable local stolen goods, high-value stolen goods from any hold, and contraband. Value thresholds are below. Stolen goods follow their tag fade timer. Confiscated items go to the hold evidence chest, like vanilla. Contraband Confiscation disables only our contraband checks. Unknown-origin cheap goods are retained. On by default.")
         Return
     EndIf
     PO_Native.SetTimerPreview(FindOption(option))
@@ -353,7 +392,13 @@ Event OnOptionHighlight(Int option)
         Return
     EndIf
     Int i = FindOption(option)
-    If i == 0
+    If i == 6
+        SetInfoText("Stolen items worth more than this amount can be recognized in any hold until their stolen tag fades. Contraband is handled separately. Default: 300 gold.")
+    ElseIf i == 7
+        SetInfoText("Value at which stolen items count as valuables in their original hold. They still follow the stolen-tag fade timer. Default: 100 gold.")
+    ElseIf i == 8
+        SetInfoText("Minimum item value for a visible stolen tag and guard confiscation. Cheaper items are ignored, except contraband. Default: 20 gold.")
+    ElseIf i == 0
         SetInfoText("How strongly witnesses reduce the cap and success chance. 0 disables this penalty. Does not change bump wariness.")
     ElseIf i == 1
         SetInfoText("Base in-game days before tracked items lose their stolen tag. Valuable items take longer. Time passes twice as fast inside storage containers.")
@@ -420,7 +465,19 @@ Function RegisterRecovery()
     RegisterForModEvent("PO_RecoverEquipped", "OnRecoverEquipped")
     RegisterForModEvent("PO_WalkEquipped", "OnWalkEquipped")
 EndFunction
+Event OnConfigManagerReady(String eventName, String strArg, Float numArg, Form sender)
+    ModName = "Pickpocket Chance Rework"
+    SKI_ConfigManager manager = sender as SKI_ConfigManager
+    If manager != None && !nameRefreshed
+        manager.UnregisterMod(Self)
+        Parent.OnConfigManagerReset(eventName, strArg, numArg, sender)
+        nameRefreshed = True
+    EndIf
+    Parent.OnConfigManagerReady(eventName, strArg, numArg, sender)
+EndEvent
 Event OnConfigOpen()
+    ModName = "Pickpocket Chance Rework"
+    SetupPages()
     PO_Native.SetTimerPreview(-1)
     RegisterRecovery()
 EndEvent

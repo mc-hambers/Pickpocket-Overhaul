@@ -1,5 +1,7 @@
 #include "BumpRules.h"
 #include "EquippedDrops.h"
+#include "RuntimeExtraData.h"
+#include "StolenTransfer.h"
 #include "Karma.h"
 #include "Core.h"
 #include "GuardRules.h"
@@ -17,6 +19,14 @@ int main(int argc,char** argv){
 if(argc==4){std::ifstream file(argv[1],std::ios::binary);std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(file)),{});auto calls=PO::Hooks::discover(bytes,std::stoul(argv[2],nullptr,16));if(calls.size()!=1)return 2;auto site=PO::Hooks::equippedTransferSite(bytes,calls[0]);std::cout<<"Verified equipped transfer call RVA 0x"<<std::hex<<site.rva<<"\n";return 0;}
 if(argc==3){std::ifstream file(argv[1],std::ios::binary);std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(file)),{});auto site=PO::Hooks::karmaSite(bytes,static_cast<std::uint32_t>(std::stoul(argv[2],nullptr,16)));std::cout<<"Verified karma RNG call RVA 0x"<<std::hex<<site.rva<<"\n";return 0;}
 using namespace PO;int checks=0;auto check=[&](bool b,const std::source_location location=std::source_location::current()){++checks;if(!b){std::cerr<<"Failed behavior check at line "<<location.line()<<" (check "<<checks<<")\n";throw std::runtime_error("situational chance regression");}};// Synthetic executable exercises the same discovery/validation code as the DLL.
+// Model a 24-byte compile-time facade whose native constructor writes 32 bytes.
+struct SmallExtraFacade{std::uint8_t bytes[24];};
+std::array<std::uint8_t,40> extraStorage;extraStorage.fill(0xCC);std::size_t requested=0;bool constructed=false;
+auto* extraTest=allocateRuntimeExtraData<SmallExtraFacade>([&](std::size_t size)->void*{requested=size;return extraStorage.data();},[&](void* storage){constructed=true;std::fill_n(static_cast<std::uint8_t*>(storage),32,0x11);});
+check(extraTest!=nullptr&&constructed&&requested==32);
+check(extraStorage[31]==0x11&&extraStorage[32]==0xCC&&extraStorage[39]==0xCC);
+check(extraDataCapacity(24)==32&&extraDataCapacity(32)==32&&extraDataCapacity(48)==48);
+constructed=false;check(!allocateRuntimeExtraData<SmallExtraFacade>([](std::size_t)->void*{return nullptr;},[&](void*){constructed=true;})&&!constructed);
 std::vector<std::uint8_t> image(1024,0x90);
 auto put16=[&](size_t p,std::uint16_t v){std::memcpy(image.data()+p,&v,2);};
 auto put32=[&](size_t p,std::uint32_t v){std::memcpy(image.data()+p,&v,4);};
@@ -426,6 +436,15 @@ ageStoredTag(aging,6.5,true,true);check(aging.expires==6.5);
 Stolen overdue;overdue.expires=10;overdue.lastTagUpdate=0;
 ageStoredTag(overdue,100,true,true);check(overdue.expires==5); // long unloaded interval
 Stolen legacyTag;legacyTag.expires=10;ageStoredTag(legacyTag,4,true,true);check(legacyTag.expires==10);check(legacyTag.lastTagUpdate==4);
+// A foreign-hold drop/pickup preserves hidden ownership, origin and timers.
+Stolen tusk;tusk.form=0x3AD6C;tusk.container=0x14;tusk.uidBase=0x14;tusk.uid=42;tusk.owner=123;tusk.originHold=456;tusk.stolenDay=2;tusk.expires=12;tusk.recognizesUntil=8;tusk.jurisdictionHidden=true;
+StolenTransfer dropTusk{tusk.form,0x14,0,0xFF001234,0x14,42,true};check(dropTusk.matches(tusk));tusk.container=dropTusk.target();check(tusk.container==0xFF001234);
+// Model persistence using the unchanged Stolen record, then return to inventory.
+Stolen reloadedTusk=tusk;StolenTransfer pickupTusk{tusk.form,0,0x14,0xFF001234,0x14,42,true};check(pickupTusk.matches(reloadedTusk));reloadedTusk.container=pickupTusk.target();check(reloadedTusk.container==0x14);
+check(reloadedTusk.originHold==456&&reloadedTusk.expires==12&&reloadedTusk.stolenDay==2&&reloadedTusk.recognizesUntil==8&&reloadedTusk.owner==123&&reloadedTusk.jurisdictionHidden);
+auto wrongPickup=pickupTusk;wrongPickup.uidBase=999;check(!wrongPickup.matches(tusk));wrongPickup=pickupTusk;wrongPickup.ground=999;check(!wrongPickup.matches(tusk));wrongPickup=pickupTusk;wrongPickup.form=999;check(!wrongPickup.matches(tusk));
+StolenTransfer noGround{tusk.form,0x14,0,0,0,42,false};check(noGround.target()==0); // Never discard history into container zero.
+StolenTransfer chestTransfer{tusk.form,0x14,0x123,0,0,42,false};check(chestTransfer.matches(reloadedTusk)&&chestTransfer.target()==0x123);
 Stolen savedTag=legacyTag;ageStoredTag(savedTag,6,true,true);check(savedTag.expires==8);
 static_assert(offsetof(Stolen,lastTagUpdate)==56); // version-one co-save compatibility
 RecoveryProgress search;
@@ -438,10 +457,18 @@ RecoveryProgress resumeSearch;resumeSearch.spent=44;check(!resumeSearch.advance(
 RecoveryProgress pausedSearch;pausedSearch.advance(0,true);pausedSearch.advance(1000,true);check(pausedSearch.spent==2); // clamp a stalled main thread
 TransferEvidence stackEvidence{1,0xF,10};stackEvidence.amount=100;stackEvidence.unitValue=1;check(stackEvidence.observe(1,0x14,0xF,100,1));stackEvidence.success=true;check(stackEvidence.consume());check(!stackEvidence.consume());check(stackEvidence.amount*stackEvidence.unitValue==100);
 // Recognition never crosses jurisdictions for cheap/local valuables, but contraband and exceptional value do.
-for(unsigned value:{0u,1u,99u,100u,999u,1000u,5000u})for(bool local:{false,true})for(bool recent:{false,true}){
- check(guardRecognizes(false,value,local,recent)==(value>=1000||(local&&(recent||value>=100))));
+for(unsigned value:{0u,1u,19u,20u,100u,299u,300u,301u,499u,500u,501u,1000u,5000u})for(bool local:{false,true})for(bool recent:{false,true}){
+ check(guardRecognizes(false,value,local,recent)==(value>=20&&recent&&(local||value>300)));
  check(guardRecognizes(true,value,local,recent));
 }
+check(guardGoods(false,99,true,true)==GuardGoods::LocalStolen);
+check(guardGoods(false,100,true,true)==GuardGoods::LocalValuable);
+check(guardGoods(false,100,true,true,20,300,150)==GuardGoods::LocalStolen);
+check(guardGoods(false,300,false,true)==GuardGoods::Ignored);
+check(guardGoods(false,301,false,true)==GuardGoods::HighValue);
+check(guardGoods(false,301,false,false)==GuardGoods::Ignored);
+check(guardGoods(false,19,true,true)==GuardGoods::Ignored);
+check(guardGoods(true,1,false,false)==GuardGoods::Contraband);
 Situation burden;burden.attention=50;burden.weight=2;burden.value=100;burden.witnessPenalty=15;burden.profileRisk=1;
 Config easier=c,harder=c;easier.pointSkew=.5f;harder.pointSkew=2;
 for(int skill=0;skill<=100;++skill){check(cap(burden,easier,float(skill))>=cap(burden,c,float(skill)));check(cap(burden,c,float(skill))>=cap(burden,harder,float(skill)));}

@@ -21,9 +21,10 @@ BetterGuardRemoval=1
 ContrabandHandling=1
 PointSkew=1
 ; Guard recognition thresholds, gold per item.
-LocalValuableGold=100
-VeryValuableGold=1000
-RecentTheftDays=1
+MinimumConfiscationGold=20
+HighValueStolenGold=300
+ValuableStolenGold=100
+; Local confiscation follows the stolen-tag fade timer.
 WitnessStrength=1
 StolenTagDays=3
 AbsoluteMaximum=97
