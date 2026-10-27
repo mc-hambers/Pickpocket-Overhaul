@@ -10,7 +10,8 @@ Int dropsToggle = -1
 Int trackingToggle = -1
 Int expirationToggle = -1
 Int guardToggle = -1
-Bool nameRefreshed = False
+Int registrationRepair = 0
+Bool registrationBusy = False
 
 Function SetupPages()
     Pages = new String[3]
@@ -26,10 +27,11 @@ EndEvent
 Event OnVersionUpdate(Int version)
     ModName = "Pickpocket Chance Rework"
     SetupPages()
+    registrationBusy = False
     RegisterRecovery()
 EndEvent
 Int Function GetVersion()
-    Return 101
+    Return 110
 EndFunction
 String Function Number(Float value)
     Int rounded
@@ -55,7 +57,7 @@ Event OnPageReset(String page)
     PO_Native.SetTimerPreview(-1)
     If page == "" || page == "Home"
         debugPage = False
-        LoadCustomContent("PickpocketOverhaul/home.dds", 24, 25)
+        LoadCustomContent("PickpocketOverhaul/home.swf", 24, 25)
         Return
     EndIf
     UnloadCustomContent()
@@ -466,14 +468,27 @@ Function RegisterRecovery()
     RegisterForModEvent("PO_WalkEquipped", "OnWalkEquipped")
 EndFunction
 Event OnConfigManagerReady(String eventName, String strArg, Float numArg, Form sender)
+    ; Ready events repeat. Guard the whole refresh against overlapping callbacks.
+    If registrationBusy
+        Return
+    EndIf
+    registrationBusy = True
     ModName = "Pickpocket Chance Rework"
     SKI_ConfigManager manager = sender as SKI_ConfigManager
-    If manager != None && !nameRefreshed
-        manager.UnregisterMod(Self)
+    If manager != None && registrationRepair < 1
+        ; Older builds removed only the first matching registration. Clear every
+        ; slot belonging to this exact quest, leaving other MCMs untouched.
+        Int removed = manager.UnregisterMod(Self)
+        Int attempts = 1
+        While removed >= 0 && attempts < 128
+            removed = manager.UnregisterMod(Self)
+            attempts += 1
+        EndWhile
         Parent.OnConfigManagerReset(eventName, strArg, numArg, sender)
-        nameRefreshed = True
+        registrationRepair = 1
     EndIf
     Parent.OnConfigManagerReady(eventName, strArg, numArg, sender)
+    registrationBusy = False
 EndEvent
 Event OnConfigOpen()
     ModName = "Pickpocket Chance Rework"

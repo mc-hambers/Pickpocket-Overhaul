@@ -1,3 +1,22 @@
+# QuickPocket built-in integration (PCR 1.1.0)
+
+Optional QuickPocket 1.0.0 support is inside PickpocketOverhaul.dll. Its numerical
+previews and attempts use PCR calculations and Karma/penalty handling. Exact
+module fingerprint and hook bytes are verified before changes in process memory.
+QuickPocket and QuickLoot IE remain separately installed requirements only when
+using QuickPocket. Their installed files are not modified.
+
+Remove the retired PCRQuickPocket.dll and restart. If it remains installed,
+built-in hooks are skipped to prevent double hooking; a warning is logged.
+StandingQuickPocket.dll is different: keep that optional adapter if you want
+Standing Pickpocket's button to open QuickPocket while standing. Hook ranges do
+not overlap. No Standing Pickpocket update is required.
+
+QuickPocket retains normal transfers: PCR equipped-item drops are not integrated.
+Actual chance display/rolls, Karma persistence, penalties and inventory ownership
+still require in-game testing. Missing/unsupported QuickPocket leaves PCR's
+normal behavior active.
+
 # Explicit loyalty and argument mappings
 
 Optional file: `Data/SKSE/Plugins/PickpocketOverhaul_Compatibility.ini`.

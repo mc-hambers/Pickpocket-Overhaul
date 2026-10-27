@@ -4,7 +4,7 @@ root=Path(__file__).resolve().parents[1]
 def sub(t,b):return t.encode()+struct.pack('<H',len(b))+b
 def text(t,s):return sub(t,s.encode()+b'\0')
 def rec(t,fid,b,flags=0):return t.encode()+struct.pack('<IIIIHH',len(b),flags,fid,0,44,0)+b
-header=sub('HEDR',struct.pack('<fII',1.7,2,0x805))+text('CNAM','Max')+text('SNAM','Pickpocket Chance Rework 1.0.0')+text('MAST','Skyrim.esm')+sub('DATA',b'\0'*8)
+header=sub('HEDR',struct.pack('<fII',1.7,2,0x805))+text('CNAM','Max')+text('SNAM','Pickpocket Chance Rework 1.1.0')+text('MAST','Skyrim.esm')+sub('DATA',b'\0'*8)
 name=b'PO_MCM'
 vmad=struct.pack('<HHH',5,2,1)+struct.pack('<H',len(name))+name+b'\0'+struct.pack('<H',0)
 # Quest fragment header: version, fragment count, empty filename, zero aliases.

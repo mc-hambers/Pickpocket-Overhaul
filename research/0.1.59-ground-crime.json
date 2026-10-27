@@ -1,0 +1,16 @@
+{
+  "runtime": "1.7.104.0",
+  "target": "0x681de0",
+  "verified_file_callers": [
+    "0x1ee867",
+    "0x1ee945",
+    "0x281eb3",
+    "0x369f4b",
+    "0x68b339",
+    "0x73da7c",
+    "0x74c803",
+    "0x90fe97",
+    "0xa489d4"
+  ],
+  "runtime_tested": false
+}

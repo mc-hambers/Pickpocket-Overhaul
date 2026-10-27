@@ -1,0 +1,15 @@
+{
+  "sha256": "4875a22611f4f3f8d229bc6818f5628d4ba26f925cca0fd3883be547891a93f7",
+  "timestamp": 1789301956,
+  "imageSize": 778240,
+  "preview": {
+    "rva": 72864,
+    "bytes": "48896c2418488974242041564883ec60"
+  },
+  "attempt": {
+    "rva": 167408,
+    "bytes": "e8ab4d0100"
+  },
+  "victimRva": 142784,
+  "plantRva": 142992
+}

@@ -1,0 +1,20 @@
+{
+  "runtime": "1.7.104",
+  "vtable_id": 208040,
+  "vtable_rva": "0x19296c0",
+  "slot": "0xBB",
+  "target_rva": "0x75a660",
+  "instructions": [
+    "test rdx, rdx",
+    "je 0x14075a881",
+    "mov rax, rsp",
+    "push rdi",
+    "push r14",
+    "push r15",
+    "sub rsp, 0x60",
+    "mov qword ptr [rax - 0x38], 0xfffffffffffffffe",
+    "mov qword ptr [rax + 8], rbx",
+    "mov qword ptr [rax + 0x18], rbp"
+  ],
+  "gameplay_tested": false
+}

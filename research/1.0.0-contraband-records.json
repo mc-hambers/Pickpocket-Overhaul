@@ -1,0 +1,104 @@
+[
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x1016b3",
+    "editorID": "HumanFlesh",
+    "type": "INGR"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0xd8e3f",
+    "editorID": "MoonSugar",
+    "type": "INGR"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0xb18cd",
+    "editorID": "HumanHeart",
+    "type": "INGR"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0xf03f8",
+    "editorID": "dunAlftandEmptySkoomaBottle",
+    "type": "MISC"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0xa",
+    "editorID": "Lockpick",
+    "type": "MISC"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x3f4bd",
+    "editorID": "WindhelmDoubleDistilledSkooma",
+    "type": "ALCH"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0xaed90",
+    "editorID": "dunSleepingTreeCampSap",
+    "type": "ALCH"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x57a7b",
+    "editorID": "FreeformAngasMillKordirsSkooma",
+    "type": "ALCH"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x57a7a",
+    "editorID": "Skooma",
+    "type": "ALCH"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x39948",
+    "editorID": "FortifySkillLockpicking04",
+    "type": "ALCH"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x39946",
+    "editorID": "FortifySkillLockpicking03",
+    "type": "ALCH"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x39945",
+    "editorID": "FortifySkillLockpicking02",
+    "type": "ALCH"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x39930",
+    "editorID": "FortifySkillLockpicking01",
+    "type": "ALCH"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x63b29",
+    "editorID": "DA01SoulGemBlackStar",
+    "type": "SLGM"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x2e504",
+    "editorID": "SoulGemBlackFilled",
+    "type": "SLGM"
+  },
+  {
+    "plugin": "Skyrim.esm",
+    "id": "0x2e500",
+    "editorID": "SoulGemBlack",
+    "type": "SLGM"
+  },
+  {
+    "plugin": "Dawnguard.esm",
+    "id": "0x201391d",
+    "editorID": "DLC1RedwaterDenSkooma",
+    "type": "ALCH"
+  }
+]

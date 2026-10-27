@@ -1,13 +1,42 @@
-# Pickpocket Chance Rework 1.0.0
+# Pickpocket Chance Rework 1.1.0
 
-Release version stays 1.0.0 until explicitly changed. Existing DLL, ESP, scripts,
-INI, serialization ID and log filenames remain unchanged for compatibility.
+[Download 1.1.0](https://github.com/mc-hambers/Pickpocket-Overhaul/releases/tag/source-1.1.0) | [Complete source](Pickpocket-Overhaul-source.zip) | [Matching precompiled CommonLib](CommonLibSSE.lib.xz)
 
-## New in 1.0.0
+Restore the precompiled dependency with `python Restore-CommonLib.py <extracted-source-root>`, or rebuild it from the included source.
+
+QuickPocket compatibility is now built into PickpocketOverhaul.dll. No separate
+PCRQuickPocket.dll is needed. Existing runtime filenames, settings and co-save
+identities remain unchanged.
+
+## New in 1.1.0
+
+- Automatically detect the supported QuickPocket 1.0.0 binary and connect its
+  percentage previews and actual attempts to PCR's existing calculations.
+- Use PCR's existing Karma toggle/history, inventory-opening suspicion,
+  failed-theft penalties and successful-stack penalties in QuickPocket sessions.
+- Preserve QuickPocket's own transfer, planting/perk filtering and crime flow.
+- Enable attribution of QuickPocket transfers for PCR's stolen-item tracking.
+- Missing or unsupported QuickPocket builds are left untouched. QuickPocket is
+  optional; ordinary PCR functionality does not require it.
+- Remove the old separate `PCRQuickPocket.dll` and restart Skyrim when upgrading.
+  If detected, it takes precedence and built-in hooks stay off to avoid duplicates.
+- The Standing QuickPocket adapter remains separate and handles only standing
+  hotkey access. Standing Pickpocket remains unchanged at 1.0.2.
+- Equipped-item drops are not redirected for QuickPocket's transfer path. Its
+  normal percentage text is retained rather than adding PCR debug parentheses.
+
+Native builds, 140,698 core checks, 35 QuickPocket native/routing checks, Papyrus
+compilation and packaging checks pass. QuickPocket gameplay remains unverified.
+
+## Retained features
+
+- Repair duplicate SkyUI registrations for this exact MCM quest once, with a
+  bounded cleanup and callback guard. Other mods are not reset. MCM script
+  revision 110; release is 1.1.0.
 
 - MCM displays Pickpocket Chance Rework, refreshes its old registration once for
   existing saves, and opens a Home page featuring the mod thumbnail. Settings
-  and Debug remain separate. The internal MCM revision is 101; release remains 1.0.0.
+  and Debug remain separate. The internal MCM revision is 110; release is 1.1.0.
 
 - MCM ownership settings include a Stolen Goods Values section: minimum stolen
   value (20 gold), local valuables (100 gold), and high-value stolen goods

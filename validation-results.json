@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "x64_loader": "passed",
   "exports": "passed",
   "plugin_name": "Pickpocket Chance Rework",
@@ -7,7 +7,7 @@
   "papyrus_compiled": true,
   "esp_esl_flag": true,
   "gameplay_tested": false,
-  "source_tag": "source-1.0.0",
+  "source_tag": "source-1.1.0",
   "ui_and_roll_live_tested": false,
   "reference_mod_redistributed": false,
   "equipped_drops_default_enabled": false,
@@ -16,5 +16,9 @@
   "custom_dialogue_removed": true,
   "ground_pickup_crime_gameplay_tested": false,
   "guard_confiscation_gameplay_tested": false,
-  "loot_cycle_api_retained": true
+  "loot_cycle_api_retained": true,
+  "quickpocket_builtin": true,
+  "quickpocket_separate_dll_required": false,
+  "quickpocket_bridge_api": 1,
+  "quickpocket_gameplay_tested": false
 }

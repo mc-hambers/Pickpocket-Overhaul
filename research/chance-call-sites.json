@@ -1,0 +1,10 @@
+{
+  "runtime": "1.7.104.0",
+  "compute_pickpocket_success_rva": "0x41d860",
+  "call_sites": [
+    "0x759cbc",
+    "0x911523"
+  ],
+  "file_audit_only": true,
+  "ui_and_roll_runtime_tested": false
+}

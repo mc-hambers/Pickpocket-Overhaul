@@ -1,11 +1,11 @@
 {
-  "version": "1.0.0",
-  "source_archive_sha256": "5752859aa85e9fee91208b51ff0788e1fb5b01569100017cf7c5ac652354fe4e",
+  "version": "1.1.0",
+  "source_archive_sha256": "f88927bfdae312a3e9000055ab61a1dbb94e5c617356b7c22bac895e9a1b0142",
   "precompiled_commonlib_sha256": "26d3794ce64c151f186732990a95dc083fe07433ab17561610f75a2ee8a2cb7a",
   "gameplay_tested": false,
   "display_name": "Pickpocket Chance Rework",
   "source_archive": "Pickpocket-Overhaul-source.zip",
-  "source_sha256": "2ce70f5a694495fdbd157b78e9034ae1a5179fe90ee6b8131bd3eda5a3774104",
-  "runtime_archive": "Pickpocket-Chance-Rework-v1.0.0.zip",
-  "runtime_sha256": "9bf254fb0f0f9f59e0861c006b7616acc99d832cc4d8d7f02194ae956fa964a0"
+  "source_sha256": "f88927bfdae312a3e9000055ab61a1dbb94e5c617356b7c22bac895e9a1b0142",
+  "runtime_archive": "Pickpocket-Chance-Rework-v1.1.0.zip",
+  "runtime_sha256": "bbef6d9e0502aeab86449b44c923203ce30918ec13ace7ae2b91678d3b14c649"
 }

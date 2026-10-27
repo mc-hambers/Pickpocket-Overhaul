@@ -1,0 +1,10 @@
+{
+  "runtime": "1.7.104.0",
+  "alarm_rva": "0x6827e0",
+  "attempt_rva": "0x759b90",
+  "verified_caller_rva": "0x759ddb",
+  "arguments": "player, victim, nullptr, 0",
+  "file_audit_passed": true,
+  "live_dialogue_tested": false,
+  "live_bounty_tested": false
+}
