@@ -15,15 +15,15 @@ class BridgeV1(ctypes.Structure):
  _fields_=[('version',ctypes.c_uint32),('ready',ctypes.c_void_p),('begin',ctypes.c_void_p),('end',ctypes.c_void_p),('preview',ctypes.c_void_p),('attempt',ctypes.c_void_p)]
 b=BridgeV1.from_address(bridge(1));assert b.version==1 and all([b.ready,b.begin,b.end,b.preview,b.attempt])
 assert not ctypes.CFUNCTYPE(ctypes.c_bool)(b.ready)() # Uninitialized DLL must not claim game readiness.
-export=(ctypes.c_uint32*2).in_dll(lib,'SKSEPlugin_Version');assert export[1]==0x01010010
+export=(ctypes.c_uint32*2).in_dll(lib,'SKSEPlugin_Version');assert export[1]==0x01010030
 name=ctypes.string_at(ctypes.addressof(export)+8,256).split(b'\0')[0].decode();assert name=='Pickpocket Chance Rework'
 result=subprocess.run([str(root/'build/OverhaulTests.exe')],capture_output=True,text=True,check=True)
 checks=int(re.search(r'Passed (\d+) behavior checks',result.stdout)[1])
 subprocess.run([__import__('sys').executable,str(root/'tests/check_removed_events.py')],check=True)
 for test in ['QuickPocketHookTests.exe','QuickPocketBridgeTests.exe']:
  subprocess.run([str(root/'build'/test)],check=True)
-runtime=release/'Pickpocket-Chance-Rework-v1.1.1.zip';source=release/'Pickpocket-Chance-Rework-v1.1.1-source.zip'
-report={'version':'1.1.1','x64_loader':'passed','exports':'passed','plugin_name':name,'core_checks':checks,'papyrus_compiled':True,'esp_esl_flag':True,'gameplay_tested':False,'source_tag':'source-1.1.1','ui_and_roll_live_tested':False,'reference_mod_redistributed':False,'equipped_drops_default_enabled':False,'equipped_drops_gameplay_tested':False,'runtime_papyrus_scripts':2,'custom_dialogue_removed':True,'ground_pickup_crime_gameplay_tested':False,'guard_confiscation_gameplay_tested':False,'loot_cycle_api_retained':True,'quickpocket_builtin':True,'quickpocket_separate_dll_required':False,'quickpocket_bridge_api':1,'quickpocket_gameplay_tested':False}
+runtime=release/'Pickpocket-Chance-Rework-v1.1.3.zip';source=release/'Pickpocket-Chance-Rework-v1.1.3-source.zip'
+report={'version':'1.1.3','x64_loader':'passed','exports':'passed','plugin_name':name,'core_checks':checks,'papyrus_compiled':True,'esp_esl_flag':True,'gameplay_tested':False,'source_tag':'source-1.1.3','ui_and_roll_live_tested':False,'reference_mod_redistributed':False,'equipped_drops_default_enabled':False,'equipped_drops_gameplay_tested':False,'runtime_papyrus_scripts':2,'custom_dialogue_removed':True,'ground_pickup_crime_gameplay_tested':False,'guard_confiscation_gameplay_tested':False,'loot_cycle_api_retained':True,'quickpocket_builtin':True,'quickpocket_separate_dll_required':False,'quickpocket_bridge_api':1,'quickpocket_gameplay_tested':False}
 (root/'validation-results.json').write_text(json.dumps(report,indent=2)+'\n')
 with zipfile.ZipFile(runtime,'w',zipfile.ZIP_DEFLATED) as z:
  z.write(dll,'SKSE/Plugins/PickpocketOverhaul.dll')
@@ -32,7 +32,7 @@ with zipfile.ZipFile(runtime,'w',zipfile.ZIP_DEFLATED) as z:
   if file.suffix=='.esp':assert struct.unpack_from('<I',file.read_bytes(),8)[0]&0x200
   z.write(file,rel)
 with zipfile.ZipFile(source,'w',zipfile.ZIP_DEFLATED) as z:
- prefix='Pickpocket-Chance-Rework-v1.1.1/'
+ prefix='Pickpocket-Chance-Rework-v1.1.3/'
  for name in ['CMakeLists.txt','vcpkg.json','LICENSE.txt','README.md','BUILD.md','TESTING.md','COMPATIBILITY.md','.gitignore','validation-results.json']:
   z.write(root/name,prefix+name)
  for folder in ['src','tests','scripts','vendor/CommonLibSSE-NG','Data/Scripts/Source','third-party','cmake','tools/papyrus-headers','artwork','Data/Interface']:
@@ -46,7 +46,7 @@ with zipfile.ZipFile(source,'w',zipfile.ZIP_DEFLATED) as z:
   if file.is_file() and (file.name.endswith('.tar.gz') or file.suffix=='.patch'):z.write(file,prefix+'dependency-sources/'+file.name)
 # Preserve exact dependency port recipes used by the portable build.
 with zipfile.ZipFile(source,'a',zipfile.ZIP_DEFLATED) as z:
- prefix='Pickpocket-Chance-Rework-v1.1.1/'
+ prefix='Pickpocket-Chance-Rework-v1.1.3/'
  for name in ['spdlog','fmt','directxmath','directxtk','rapidcsv','vcpkg-cmake','vcpkg-cmake-config']:
   for file in (root.parent/'Pickpocketing-Loot/tools/vcpkg/ports'/name).rglob('*'):
    if file.is_file():z.write(file,prefix+'dependency-sources/ports/'+name+'/'+file.name)
