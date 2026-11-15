@@ -7,6 +7,22 @@
 #include <stdexcept>
 #include <vector>
 namespace PO::Hooks {
+template<class Copy> inline void overlayExecutable(std::vector<std::uint8_t>& file,Copy copy) {
+    auto u16=[&](std::size_t p){if(p>file.size()||file.size()-p<2)throw std::runtime_error("Truncated PE");std::uint16_t v;std::memcpy(&v,file.data()+p,2);return v;};
+    auto u32=[&](std::size_t p){if(p>file.size()||file.size()-p<4)throw std::runtime_error("Truncated PE");std::uint32_t v;std::memcpy(&v,file.data()+p,4);return v;};
+    if(u16(0)!=0x5A4D)throw std::runtime_error("Invalid DOS header");
+    const auto pe=u32(0x3c);
+    if(u32(pe)!=0x4550||u16(pe+4)!=0x8664||u16(pe+24)!=0x20b)throw std::runtime_error("Expected x64 PE");
+    const auto count=u16(pe+6),optional=u16(pe+20);const auto imageSize=u32(pe+24+56);
+    if(!count||count>96||optional<60)throw std::runtime_error("Invalid executable headers");
+    for(unsigned n=0;n<count;++n) {
+        const auto h=pe+24+optional+n*40;const auto flags=u32(h+36);
+        if(!(flags&0x20000000)||std::memcmp(file.data()+h,".bind",5)==0)continue;
+        const auto rva=u32(h+12),rawSize=u32(h+16),raw=u32(h+20),virtualSize=u32(h+8);
+        if(raw>file.size()||rawSize>file.size()-raw||rva>imageSize||rawSize>imageSize-rva||virtualSize>imageSize-rva)throw std::runtime_error("Executable section out of bounds");
+        copy(rva,std::span<std::uint8_t>(file.data()+raw,rawSize));
+    }
+}
 inline std::int64_t destination(std::span<const std::uint8_t> bytes,std::size_t call,std::uint64_t address) {
     if(call>bytes.size()||bytes.size()-call<5||bytes[call]!=0xE8)throw std::runtime_error("Expected near CALL");
     std::int32_t offset;std::memcpy(&offset,bytes.data()+call+1,4);

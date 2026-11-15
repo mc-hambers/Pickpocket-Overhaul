@@ -566,18 +566,42 @@ bool executableAddress(std::uintptr_t address) {
     if(!VirtualQuery(reinterpret_cast<void*>(address),&info,sizeof(info))||info.State!=MEM_COMMIT||(info.Protect&(PAGE_GUARD|PAGE_NOACCESS)))return false;
     return (info.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))!=0;
 }
+std::vector<std::uint8_t> executableSnapshot;
+const std::vector<std::uint8_t>& hookImage() {
+    if(!executableSnapshot.empty())return executableSnapshot;
+    auto& module=REL::Module::get();
+    std::ifstream input(std::filesystem::path(module.filePath().data()),std::ios::binary|std::ios::ate);
+    if(!input)throw std::runtime_error("Cannot open executable headers");
+    const auto size=input.tellg();if(size<=0||size>512*1024*1024)throw std::runtime_error("Invalid executable size");
+    std::vector<std::uint8_t> file(static_cast<std::size_t>(size));input.seekg(0);
+    if(!input.read(reinterpret_cast<char*>(file.data()),static_cast<std::streamsize>(file.size())))throw std::runtime_error("Cannot read executable headers");
+    // Steam's on-disk .text can be encrypted. The loaded process contains the
+    // decrypted executable that Address Library actually describes. Preserve
+    // file offsets for the existing call/ABI validators, replacing code only.
+    Hooks::overlayExecutable(file,[&](std::uint32_t rva,std::span<std::uint8_t> out){
+        const auto begin=module.base()+rva;
+        std::size_t done=0;
+        while(done<out.size()) {
+            MEMORY_BASIC_INFORMATION region{};
+            if(!VirtualQuery(reinterpret_cast<void*>(begin+done),&region,sizeof(region)) ||
+               region.State!=MEM_COMMIT || (region.Protect&(PAGE_GUARD|PAGE_NOACCESS)))throw std::runtime_error("Unreadable loaded executable section");
+            const auto end=reinterpret_cast<std::uintptr_t>(region.BaseAddress)+region.RegionSize;
+            const auto count=std::min(out.size()-done,end-(begin+done));
+            if(!count)throw std::runtime_error("Invalid loaded executable region");
+            std::memcpy(out.data()+done,reinterpret_cast<void*>(begin+done),count);done+=count;
+        }
+    });
+    executableSnapshot=std::move(file);
+    SKSE::log::info("Hook discovery uses decrypted loaded executable sections, runtime {}",module.version().string());
+    return executableSnapshot;
+}
 bool installChance() {
     try {
         REL::Relocation<std::uintptr_t> target{RELOCATION_ID(25822,26379)};original=reinterpret_cast<ChanceFn>(target.address());
         auto& module=REL::Module::get();const auto base=module.base();
-        const std::filesystem::path path(module.filePath().data());
-        std::ifstream input(path,std::ios::binary|std::ios::ate);
-        if(!input)throw std::runtime_error("Cannot open running executable");
-        const auto size=input.tellg();if(size<=0||size>512*1024*1024)throw std::runtime_error("Invalid executable size");
-        std::vector<std::uint8_t> file(static_cast<std::size_t>(size));input.seekg(0);
-        if(!input.read(reinterpret_cast<char*>(file.data()),static_cast<std::streamsize>(file.size())))throw std::runtime_error("Cannot read executable");
+        const auto& file=hookImage();
         const auto sites=Hooks::discover(file,target.address()-base);
-        if(sites.size()!=2)throw std::runtime_error("Expected exactly two original chance callers");
+        if(sites.size()!=2)throw std::runtime_error(fmt::format("Expected exactly two original chance callers, found {} (target RVA {:X})",sites.size(),target.address()-base));
         const auto text=module.segment(REL::Segment::textx);
         for(unsigned i=0;i<2;++i){const auto address=base+sites[i].rva;
             if(address<text.address()+8||address+13>text.address()+text.size())throw std::runtime_error("Chance caller outside executable text");
@@ -823,11 +847,7 @@ bool installAttempts() {
     try {
         REL::Relocation<std::uintptr_t> target{RELOCATION_ID(39568,40654)};
         auto& module=REL::Module::get();const auto base=module.base();
-        std::ifstream input(std::filesystem::path(module.filePath().data()),std::ios::binary|std::ios::ate);
-        if(!input)throw std::runtime_error("Cannot open executable");
-        const auto size=input.tellg();if(size<=0||size>512*1024*1024)throw std::runtime_error("Invalid executable size");
-        std::vector<std::uint8_t> file(static_cast<std::size_t>(size));input.seekg(0);
-        if(!input.read(reinterpret_cast<char*>(file.data()),static_cast<std::streamsize>(file.size())))throw std::runtime_error("Cannot read executable");
+        const auto& file=hookImage();
         const auto sites=Hooks::discover(file,target.address()-base);
         if(sites.size()!=1)throw std::runtime_error("Expected exactly one native theft-attempt caller");
         const auto address=base+sites[0].rva;const auto text=module.segment(REL::Segment::textx);
@@ -850,11 +870,7 @@ bool prepareRecognitionAlarm() {
         REL::Relocation<std::uintptr_t> alarm{RELOCATION_ID(36428,37423)};
         REL::Relocation<std::uintptr_t> attemptTarget{RELOCATION_ID(39568,40654)};
         auto& module=REL::Module::get();const auto base=module.base();
-        std::ifstream input(std::filesystem::path(module.filePath().data()),std::ios::binary|std::ios::ate);
-        if(!input)throw std::runtime_error("Cannot open executable");
-        const auto size=input.tellg();if(size<=0||size>512*1024*1024)throw std::runtime_error("Invalid executable size");
-        std::vector<std::uint8_t> file(static_cast<std::size_t>(size));input.seekg(0);
-        if(!input.read(reinterpret_cast<char*>(file.data()),static_cast<std::streamsize>(file.size())))throw std::runtime_error("Cannot read executable");
+        const auto& file=hookImage();
         auto sites=Hooks::discover(file,alarm.address()-base);
         // Require the alarm call used by the native theft attempt. Reject a
         // missing/ambiguous mapping instead of falling back to a value-based fine.
@@ -879,6 +895,21 @@ RE::ExtraDataList* instance(RE::TESObjectREFR* container,const Stolen& s) {
     for(auto& [object,e]:inv)if(e.first>0&&e.second&&e.second->extraLists)for(auto* x:*e.second->extraLists)if(x)if(auto* id=x->GetByType<RE::ExtraUniqueID>();id&&id->baseID==s.uidBase&&id->uniqueID==s.uid)return x;
     return nullptr;
 }
+// One filtered inventory snapshot per container for this background pass only.
+// Extra lists are live instance data; nothing is cached across frames or saves.
+struct InventoryPass {
+    std::map<RE::FormID,std::set<RE::FormID>> forms;
+    std::map<RE::FormID,RE::TESObjectREFR::InventoryItemMap> inventories;
+    explicit InventoryPass(const std::vector<Stolen>& items){for(const auto& s:items)forms[s.container].insert(s.form);}
+    RE::ExtraDataList* find(RE::TESObjectREFR* container,const Stolen& s) {
+        if(container->GetBaseObject()&&container->GetBaseObject()->GetFormID()==s.form)return instance(container,s);
+        auto it=inventories.find(s.container);
+        if(it==inventories.end())it=inventories.emplace(s.container,container->GetInventory([&](RE::TESBoundObject& object){return forms[s.container].contains(object.GetFormID());})).first;
+        for(auto& [object,e]:it->second)if(object->GetFormID()==s.form&&e.first>0&&e.second&&e.second->extraLists)
+            for(auto* x:*e.second->extraLists)if(x)if(auto* id=x->GetByType<RE::ExtraUniqueID>();id&&id->baseID==s.uidBase&&id->uniqueID==s.uid)return x;
+        return nullptr;
+    }
+};
 void processDeferredDrops() {
     auto* ui=RE::UI::GetSingleton();if(!ui||ui->IsMenuOpen(RE::ContainerMenu::MENU_NAME))return;
     for(auto& drop:deferredDrops)drop.after=playSeconds; // migrate old queued originals without adding further delay
@@ -1260,14 +1291,16 @@ void tick() {
     double today=days();std::erase_if(bumpRules,[&](const auto& entry){const auto& r=entry.second;return r.nextBonusDay<=today&&r.blockedUntilDay<=today&&r.recognizedUntilDay<=today&&r.bonusUntil<=playSeconds;});std::set<std::pair<std::uint32_t,std::uint16_t>> completed;std::set<RE::FormID> reportedVictims;
     for(auto& item:stolen)advanceStoredTag(item,today);
     if(!stolenTracking.load())return; // History is retained; disabling never clears vanilla ownership.
-    for(auto& s:stolen){auto* container=RE::TESForm::LookupByID<RE::TESObjectREFR>(s.container);if(!container)continue;auto* x=instance(container,s);if(!x)continue;
+    InventoryPass inventoryPass(stolen);
+    auto* playerHold=currentHold(p);
+    for(auto& s:stolen){auto* container=RE::TESForm::LookupByID<RE::TESObjectREFR>(s.container);if(!container)continue;auto* x=inventoryPass.find(container,s);if(!x)continue;
         const bool onGround=container->GetBaseObject()&&container->GetBaseObject()->GetFormID()==s.form;
         if(!onGround&&(stolenTagExpiration.load()||!x->GetOwner()||x->GetOwner()->GetFormID()!=s.owner)&&today>=std::max(s.expires,s.recognizesUntil))completed.emplace(s.uidBase,s.uid);
         if(s.victim&&today>=s.noticed&&today<s.recognizesUntil)states[s.victim].suspicion=std::max(15.f,states[s.victim].suspicion);
         if(stolenTagExpiration.load()&&!onGround&&!evidenceContainers.contains(s.container)){
             if(today>=s.expires){if(x->GetOwner()&&x->GetOwner()->GetFormID()==s.owner)x->SetOwner(p->GetActorBase());}
             else if(betterGuard.load()&&s.container==0x14&&s.originHold){
-                auto* object=RE::TESForm::LookupByID<RE::TESBoundObject>(s.form);auto* hold=currentHold(p);
+                auto* object=RE::TESForm::LookupByID<RE::TESBoundObject>(s.form);auto* hold=playerHold;
                 // Unknown locations retain the original tag rather than guessing jurisdiction.
                 if(object&&hold){const bool identifiable=guardCanIdentify(&s,hold,object,s.value);auto* owner=x->GetOwner();
                     if(!identifiable&&owner&&owner->GetFormID()==s.owner){x->SetOwner(p->GetActorBase());s.jurisdictionHidden=true;}
@@ -1287,6 +1320,7 @@ void tick() {
             // Match the vanilla failed-attempt call exactly: player, victim,
             // no transferred object, count zero. The engine selects crime 1.
             recognitionAlarm(p,victim,nullptr,0);
+            inventoryPass.inventories.clear();
             const auto after=faction?faction->GetCrimeGoldNonViolent():0;
             SKSE::log::info("Victim {:08X} recognized stolen item {:08X}: native pickpocket reaction, crime faction {:08X}, nonviolent bounty {} -> {}",s.victim,s.form,faction?faction->GetFormID():0,before,after);
         }else SKSE::log::info("Victim {:08X} also recognized {:08X}; same recognition report, no second alarm",s.victim,s.form);
@@ -1318,7 +1352,7 @@ if(version==3){BadLuckProtection saved;if(length==4&&api->ReadRecordData(&saved.
 else if(version==2){BadLuckProtection saved;std::uint8_t enabled=0;if(length==5&&api->ReadRecordData(&saved.credit,4)==4&&api->ReadRecordData(&enabled,1)==1&&enabled<=1&&saved.valid()){karma=saved;}else SKSE::log::error("Invalid bad-luck karma co-save record");}
 else if(version==1){KarmaRolls legacy;std::uint8_t enabled=0;if(length==113&&api->ReadRecordData(&legacy.seed,8)==8&&api->ReadRecordData(&legacy.cursor,4)==4&&api->ReadRecordData(legacy.bag.data(),100)==100&&api->ReadRecordData(&enabled,1)==1&&enabled<=1&&legacy.valid()){karma={};SKSE::log::info("Migrated shuffled karma to bad-luck protection; INI preference retained, initialized credit to zero");}else SKSE::log::error("Invalid legacy karma record");}continue;}if(type==pressureRecord&&version==1){std::uint32_t count;if(api->ReadRecordData(&count,4)!=4||count>100000)return;for(unsigned i=0;i<count;++i){std::uint32_t id,resolved;TheftPressure pressure;if(api->ReadRecordData(&id,4)!=4||api->ReadRecordData(&pressure.stacks,4)!=4||api->ReadRecordData(&pressure.until,sizeof(pressure.until))!=sizeof(pressure.until))return;if(api->ResolveFormID(id,resolved)&&pressure.stacks>0&&pressure.stacks<=100&&std::isfinite(pressure.until))theftPressure[resolved]=pressure;}continue;}if(type==trailRecord&&(version>=1&&version<=3)){std::uint32_t count;if(api->ReadRecordData(&count,4)!=4||count>100000)return;for(unsigned i=0;i<count;++i){std::uint32_t id,resolved;AttentionTrail trail;if(api->ReadRecordData(&id,4)!=4||api->ReadRecordData(&trail.last,sizeof(trail.last))!=sizeof(trail.last)||api->ReadRecordData(&trail.reaction,sizeof(trail.reaction))!=sizeof(trail.reaction))return;if(version>=2&&api->ReadRecordData(&trail.bumpType,sizeof(trail.bumpType))!=sizeof(trail.bumpType))return;if(version>=3&&(api->ReadRecordData(&trail.bumpEffect,sizeof(trail.bumpEffect))!=sizeof(trail.bumpEffect)||api->ReadRecordData(&trail.wariness,sizeof(trail.wariness))!=sizeof(trail.wariness)||api->ReadRecordData(&trail.warinessLast,sizeof(trail.warinessLast))!=sizeof(trail.warinessLast)))return;if(api->ResolveFormID(id,resolved)&&std::isfinite(trail.bumpEffect)&&trail.bumpEffect>=.25f&&trail.bumpEffect<=1&&std::isfinite(trail.wariness)&&trail.wariness>=0&&trail.wariness<=3&&std::isfinite(trail.warinessLast)&&trail.bumpType<=1&&std::isfinite(trail.last)&&std::isfinite(trail.reaction)&&trail.reaction>=0&&trail.reaction<=57)attentionTrails[resolved]=trail;}continue;}if(type!=record||(version<1||version>3))continue;std::uint32_t count;if(api->ReadRecordData(&playSeconds,sizeof(playSeconds))!=sizeof(playSeconds)||!std::isfinite(playSeconds)||api->ReadRecordData(&count,4)!=4||count>100000)return;for(unsigned i=0;i<count;++i){std::uint32_t id,newID;AttentionState s;if(api->ReadRecordData(&id,4)!=4||api->ReadRecordData(&s,sizeof(s))!=sizeof(s))return;if(api->ResolveFormID(id,newID)&&std::isfinite(s.suspicion))states.emplace(newID,s);}if(api->ReadRecordData(&count,4)!=4||count>100000)return;for(unsigned i=0;i<count;++i){Stolen s;const auto bytes=version==1?offsetof(Stolen,lastTagUpdate):version==2?offsetof(Stolen,originHold):sizeof(s);if(api->ReadRecordData(&s,static_cast<std::uint32_t>(bytes))!=bytes)return;bool validIDs=true;for(auto* id:{&s.victim,&s.form,&s.owner,&s.container,&s.uidBase,&s.originHold}){std::uint32_t next=0;if(*id&&!api->ResolveFormID(*id,next)){validIDs=false;break;}if(*id)*id=next;}if(validIDs&&std::isfinite(s.expires)&&std::isfinite(s.recognizesUntil)&&std::isfinite(s.lastTagUpdate))stolen.push_back(s);}}}
 void message(SKSE::MessagingInterface::Message* e){PCRQPIntegration::message(e);switch(e->type){case SKSE::MessagingInterface::kPostLoad:{connectLootCycles();auto h=GetModuleHandleW(L"StandingPickpocket.dll");if(h){auto request=reinterpret_cast<StandingPickpocketAPI::Request>(GetProcAddress(h,"StandingPickpocket_RequestAPI"));if(request)standing=request(1);}distanceOverride();break;}
-case SKSE::MessagingInterface::kDataLoaded:{auto* data=RE::TESDataHandler::GetSingleton();recoveryPausePackage=data->LookupForm<RE::TESPackage>(0x803,"PickpocketOverhaul.esp");if(!recoveryPausePackage)SKSE::log::warn("Recovery pause package missing; update PickpocketOverhaul.esp with DLL and scripts");capPerk=data->LookupForm<RE::BGSPerk>(0x1B,"HandtoHand.esp");artfulManaged=data->LookupModByName("Artful Dodger - Dynamic Pickpocket Cap.esp")!=nullptr;capManaged=artfulManaged||capPerk||data->LookupModByName("Adamant.esp");if(capManaged.load()){resolveMaximum(RE::PlayerCharacter::GetSingleton());SKSE::log::info("Simonrim maximum enabled: normal 89/99; first qualifying bump 90/100; Hand to Hand perk {:08X}",capPerk?capPerk->GetFormID():0);}auto faction=[data](unsigned id){return data->LookupForm<RE::TESFaction>(id,"Skyrim.esm");};follower=faction(0x5C84E);loadCompatibility(data);auto* source=RE::ScriptEventSourceHolder::GetSingleton();auto& events=Events::get();initializeContraband(data);installGuardRemoval();source->AddEventSink<RE::TESContainerChangedEvent>(&events);source->AddEventSink<RE::TESUniqueIDChangeEvent>(&events);source->AddEventSink<RE::TESHitEvent>(&events);RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(&events);hookReady=installChance();if(hookReady){installAttempts();prepareRecognitionAlarm();installDroppedCrimeHook();installWitnessDisplay();installTimerPreview();installExplosionSignals();}SKSE::log::info("Native small/large bump monitor enabled at 100ms; greetings and sleeping handling enabled");worker=std::jthread([](std::stop_token stop){while(!stop.stop_requested()){std::this_thread::sleep_for(std::chrono::milliseconds(100));if(active&&!queued.exchange(true)){auto generation=session.load();SKSE::GetTaskInterface()->AddTask([generation]{queued=false;if(active&&session==generation)tick();});}}});break;}
+case SKSE::MessagingInterface::kDataLoaded:{auto* data=RE::TESDataHandler::GetSingleton();recoveryPausePackage=data->LookupForm<RE::TESPackage>(0x803,"PickpocketOverhaul.esp");if(!recoveryPausePackage)SKSE::log::warn("Recovery pause package missing; update PickpocketOverhaul.esp with DLL and scripts");capPerk=data->LookupForm<RE::BGSPerk>(0x1B,"HandtoHand.esp");artfulManaged=data->LookupModByName("Artful Dodger - Dynamic Pickpocket Cap.esp")!=nullptr;capManaged=artfulManaged||capPerk||data->LookupModByName("Adamant.esp");if(capManaged.load()){resolveMaximum(RE::PlayerCharacter::GetSingleton());SKSE::log::info("Simonrim maximum enabled: normal 89/99; first qualifying bump 90/100; Hand to Hand perk {:08X}",capPerk?capPerk->GetFormID():0);}auto faction=[data](unsigned id){return data->LookupForm<RE::TESFaction>(id,"Skyrim.esm");};follower=faction(0x5C84E);loadCompatibility(data);auto* source=RE::ScriptEventSourceHolder::GetSingleton();auto& events=Events::get();initializeContraband(data);installGuardRemoval();source->AddEventSink<RE::TESContainerChangedEvent>(&events);source->AddEventSink<RE::TESUniqueIDChangeEvent>(&events);source->AddEventSink<RE::TESHitEvent>(&events);RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(&events);hookReady=installChance();if(hookReady){installAttempts();prepareRecognitionAlarm();installDroppedCrimeHook();installWitnessDisplay();installTimerPreview();installExplosionSignals();}std::vector<std::uint8_t>().swap(executableSnapshot);SKSE::log::info("Native small/large bump monitor enabled at 100ms; greetings and sleeping handling enabled");worker=std::jthread([](std::stop_token stop){while(!stop.stop_requested()){std::this_thread::sleep_for(std::chrono::milliseconds(100));if(active&&!queued.exchange(true)){auto generation=session.load();SKSE::GetTaskInterface()->AddTask([generation]{queued=false;if(active&&session==generation)tick();});}}});break;}
 case SKSE::MessagingInterface::kPreLoadGame:{std::scoped_lock lock(mutex);recoveryPaths.clear();active=false;++session;break;}
 case SKSE::MessagingInterface::kNewGame:clear(nullptr);[[fallthrough]];
 case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterface::kPostLoadGame&&!e->data)break;lastTick=Clock::now();if(capManaged.load())resolveMaximum(RE::PlayerCharacter::GetSingleton());active=hookReady.load();distanceOverride();break;default:break;}}
@@ -1326,4 +1360,4 @@ case SKSE::MessagingInterface::kPostLoadGame:if(e->type==SKSE::MessagingInterfac
 extern "C" __declspec(dllexport) const PCRQuickPocketAPI::V1* PickpocketOverhaul_RequestQuickPocketAPI(std::uint32_t version){
  static const PCRQuickPocketAPI::V1 api{1,quickPocketReady,quickPocketBegin,quickPocketEnd,quickPocketPreview,quickPocketAttempt};return version==1?&api:nullptr;
 }
-SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Chance Rework 1.1.0; runtime {}",REL::Module::get().version().string());loadSettings();auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}
+SKSEPluginLoad(const SKSE::LoadInterface* skse){SKSE::Init(skse);auto folder=SKSE::log::log_directory();if(folder){*folder/="PickpocketOverhaul.log";auto sink=std::make_shared<spdlog::sinks::basic_file_sink_mt>(folder->string(),true);auto logger=std::make_shared<spdlog::logger>("global",sink);spdlog::set_default_logger(logger);spdlog::set_level(spdlog::level::info);spdlog::flush_on(spdlog::level::info);}SKSE::log::info("Pickpocket Chance Rework 1.1.1; runtime {}",REL::Module::get().version().string());loadSettings();auto* api=SKSE::GetSerializationInterface();api->SetUniqueID(0x504F5631);api->SetSaveCallback(save);api->SetLoadCallback(load);api->SetRevertCallback(clear);if(!SKSE::GetPapyrusInterface()->Register(registerPapyrus))return false;return SKSE::GetMessagingInterface()->RegisterListener(message);}

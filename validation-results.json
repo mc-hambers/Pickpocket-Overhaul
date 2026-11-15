@@ -1,24 +1,19 @@
 {
-  "version": "1.1.0",
-  "x64_loader": "passed",
-  "exports": "passed",
-  "plugin_name": "Pickpocket Chance Rework",
-  "core_checks": 140698,
-  "papyrus_compiled": true,
-  "esp_esl_flag": true,
   "gameplay_tested": false,
-  "source_tag": "source-1.1.0",
-  "ui_and_roll_live_tested": false,
-  "reference_mod_redistributed": false,
-  "equipped_drops_default_enabled": false,
-  "equipped_drops_gameplay_tested": false,
-  "runtime_papyrus_scripts": 2,
-  "custom_dialogue_removed": true,
-  "ground_pickup_crime_gameplay_tested": false,
-  "guard_confiscation_gameplay_tested": false,
-  "loot_cycle_api_retained": true,
-  "quickpocket_builtin": true,
-  "quickpocket_separate_dll_required": false,
-  "quickpocket_bridge_api": 1,
-  "quickpocket_gameplay_tested": false
+  "measured_frame_time_improvement": false,
+  "save_load_functions_unchanged": true,
+  "pickpocket_behavior_checks": 140698,
+  "flora_timer_checks": 3897,
+  "runtime_hook_fixture_checks": 15,
+  "Pickpocket-Chance-Rework-v1.1.1.zip": {
+    "sha256": "dbd8086d297855fb4410e0b0209199c81144a0607d35cc2b7755bb26fd407d7f",
+    "bytes": 520433
+  },
+  "Harvestable-Flora-Regrows-v1.1.2.zip": {
+    "sha256": "7a2309844ebca321a836a06278e1e2d1a12bc8d55169d4d41583611fe5a0be07",
+    "bytes": 332831
+  },
+  "version": "1.1.1",
+  "source_matches_built_plugin": true,
+  "live_gameplay_tested": false
 }
